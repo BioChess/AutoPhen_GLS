@@ -10,6 +10,20 @@ abstract:
 
 **1. Load packages and functions**
 
+Some packages require to be installed remotely from other repositories outside of CRAN. Following lines need to be run only the first time.
+
+```{r setup, include=FALSE}
+#install.packages("devtools")
+#library(devtools)
+#install.packages("remotes")
+#library(remotes)
+#install_github("SWotherspoon/SGAT")
+#install_github("SWotherspoon/BAStag")
+#install_github("bmcclintock/momentuHMM")
+#install_github("SLisovski/TwGeos")
+#install_github("SLisovski/GeoLight")
+```
+
 We load required packages and functions elaborated for simplify the process
 
 ```{r setup, include=FALSE}
@@ -17,9 +31,11 @@ pacman::p_load('devtools','remotes', # loading packages
                'readxl', # opening Excels and csv
                'tidyverse',  #manging data
                'lubridate', # dealing with dates
-               'maps', 'rworldmap', 'maptools', # creating map for preprocessLight
+               'maps', 'rworldmap', 'maptools', # creating map 
                'GeoLight', 'BAStag', 'TwGeos','SGAT' # geolocators
                )
+
+
 detach("package:purrr", unload = TRUE)
 source('Functions/FUNCTION_datetime_conversion.R')
 source("Functions/01_FUNCTIONS_Supervised_GLS_calibrations.R")
@@ -37,10 +53,14 @@ col.name <- 'Veneguera'
 col.lat <- 27.84444
 col.lon <- -15.78861
 
-threshold = 2 
+threshold = 2 # defones since which value is night or daylight
 
 knitr::opts_chunk$set(echo = TRUE, tidy.opts = list(width.cutoff = 40), tidy = TRUE)
 ```
+
+Threshold defines the light levels above which it is day and below it is night .Normally it is between 1.5 and 2.
+
+Following values are limiting the area for map the raw points inferred from light data along calibrations period. The map will be a helping tool, but not the main one.
 
 ```{r, include=FALSE, echo=F, message=F, warning=F}
 xlim <- c(-20, 0)
@@ -48,5 +68,109 @@ ylim <- c(15, 40)
 map <- rworldmap::getMap(resolution = "coarse")
 
 knitr::opts_chunk$set(echo = TRUE, tidy.opts = list(width.cutoff = 40), tidy = TRUE)
+```
 
+**3. Loop to determine sun angles parameters**
+
+```{r, include=FALSE, echo=F, message=F, warning=F}
+
+for (i in 1:nrow(GLS.files)) {
+  #i=1
+  setwd(paste0(wd, '/RawData/GLS/lux/'))
+  
+  # Load .lux file and extract the GLS id from the name of the file
+  info<-GLS.files[i,]
+  geoID <- info$geo_alfanum#Which GLS is processing
+  
+  lightfile <- if_else(!is.na(info$File.adjlux), info$File.adjlux, info$File.lux)
+  if (!file.exists(lightfile) || geoID == GLS.files[i - 1, 'geo_alfanum']) {
+    message(' Skipping geo (',i,') ', geoID, ' as there is no file or it has already been calibrated.\n')
+    next
+  }
+  
+  geoID <- info$geo_alfanum#Which GLS is processing
+  year <- info$Year_rec
+  cat('Processing geo (', i,') ', geoID, 'for year', year, '\n')
+  
+  # Select colony and determine coordinates
+  sp <- info$Sp
+  
+  
+  # Get info of the GLS and its calibration
+
+  calib<-calib.info%>%filter(geo_alfanum == geoID)# calibration info
+  
+  start_date<-as.Date(info$start_date, tz = 'GMT') #date start the trip
+  end_date <-as.Date(info$end_date, tz = 'GMT') #date end the trip
+  
+  LoggerModel<-info$Modelo#logger model
+  Producer<- info$Producer #e.g "Migrate Technology","BAS","Biotrack","Lotek"
+
+  
+  lu <- read_lightGLS(producer = Producer, geo_trip, 
+                      file_name = lightfile, 
+                      start_date = start_date, 
+                      end_date = end_date, 
+                      MTexcep = MTlux_exception)
+  
+  # d.lux$Date <- as.POSIXct(strptime(d.lux$Date, format = '%Y-%m-%d %H:%M:%S', tz = 'GMT'))
+
+  # Calculate zenith angle and alpha parameter from calibration periods. 
+  # Our devices have been calibrated as maxim three times, so we repeat the loop 
+  # three times
+  
+  twl_error.list <-list()
+  for (step in 1:3) {
+  
+    # Define the calib_start and calib_end for the current step
+    calib_start <- calib[[paste0("calib_start", step)]]
+    calib_end <- calib[[paste0("calib_end", step)]] + 1 * 60 * 60 * 24
+    n_days <- round(as.numeric(difftime(calib_end, calib_start, 
+                                        units = 'days')))
+    loc <- calib[[paste0("loc_calib", step)]]
+    lon <- calib[[paste0("Lon", step)]]
+    lat <- calib[[paste0("Lat", step)]]
+    
+    calib_SGAT <- NA
+    
+    if (!is.na(loc) && !is.na(calib_end)) {
+      # Perform calibration for the current step
+      twl <- calib_period(calib_start = calib_start, 
+                          calib_end = calib_end, 
+                          lon = lon, lat = lat,
+                          threshold =threshold)
+      
+      # Save calibration data
+      save_calib(twl, geoID, sp, year, col.name, step)
+      
+      # Perform SGAT calibration
+      calib_SGAT <- calibration_SGAT(twl, lon = lon, lat = lat, method = 'gamma')
+      
+    } else {
+      message('No calibration information for step',step,'\n')
+      calib_SGAT <- c('NA', 'NA', 'NA', 'NA')
+    }
+    
+    if(step == 3){cat('Geo done')}
+    
+    twl_error <- bind_cols(geoID = geoID, Producer = Producer, Year = year, Colony = col.name,
+                           n_days = n_days,
+                           zenith = calib_SGAT[1], 
+                           zenith0 = calib_SGAT[2], 
+                           alpha.mean = calib_SGAT[3], 
+                           alpha.sd = calib_SGAT[4],
+                           Loc = loc)
+   
+    colnames(twl_error)[5:10]<- paste0(colnames(twl_error[5:10]),'_PD', step)
+    
+    
+    twl_error.list[[step]] <-list(twl_error)
+  }
+  twl_error_GLS<- bind_rows(calib_SGAT.list)%>%
+    group_by(geoID, Producer, year, Colony) %>% 
+    summarise_all(funs(na.omit(.)[1]))
+  
+  calib.list_SGAT[i]<-list(twl_error_GLS)
+  
+}
 ```
