@@ -1,0 +1,47 @@
+---
+title: "GLS supervised calibrations analyses"
+author: Diego Vicente Sastre
+date: "`r Sys.Date()`"
+output: github_document
+abstract:
+  "R script to extract sun angles of calibration periods of light-level
+   geolocators"
+  
+---
+We load required packages and functions elaborated for simplify the process
+
+```{r setup, include=FALSE}
+pacman::p_load('devtools','remotes', # loading packages
+               'readxl', # opening Excels and csv
+               'tidyverse',  #manging data
+               'lubridate', # dealing with dates
+               'maps', 'rworldmap', 'maptools', # creating map for preprocessLight
+               'GeoLight', 'BAStag', 'TwGeos','SGAT' # geolocators
+               )
+detach("package:purrr", unload = TRUE)
+source('Functions/FUNCTION_datetime_conversion.R')
+source("Functions/01_FUNCTIONS_Supervised_GLS_calibrations.R")
+knitr::opts_chunk$set(echo = TRUE, tidy.opts = list(width.cutoff = 40), tidy = TRUE)
+```
+
+
+```{r, include=FALSE, echo=F, message=F, warning=F}
+GLS.files <- read_csv('RawData/GLS.files.csv', col_names = TRUE)
+GLS.info <- read_csv('RawData/GLS.info.csv', col_names = TRUE)
+calib.info <- read_csv('RawData/Info.calibrations.csv')
+
+col.name <- 'Veneguera'
+col.lat <- 27.84444
+col.lon <- -15.78861
+
+knitr::opts_chunk$set(echo = TRUE, tidy.opts = list(width.cutoff = 40), tidy = TRUE)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
