@@ -1,3 +1,0 @@
-Ring,Colony,Sp,geo_alfanum,Producer,Modelo,Year_dep,Year_rec,N_trips,start_date,end_date,geo_trip,File.lux,File.adjlux,File.deg,File.adjdeg,File.sst,Resucitat,Calibrations,Calib.param
-6134564,Veneguera,CALBOR,11001,Biotrack,Mk,2002,2003,1,2002-06-18T00:00:00Z,2003-05-01T00:00:00Z,11001001,11001_CALBOR_2003_Veneguera_000.lig,NA,11001_CALBOR_2003_Veneguera_000.act,NA,NA,No,No,Yes
-6134563,Veneguera,CALBOR,12001,Biotrack,Mk,2002,2003,1,2002-06-19T00:00:00Z,2003-06-15T00:00:00Z,12001001,12001_CALBOR_2003_Veneguera_2_000.lig,NA,12001_CALBOR_2003_Veneguera_2_000.act,NA,NA,No,No,Yes
