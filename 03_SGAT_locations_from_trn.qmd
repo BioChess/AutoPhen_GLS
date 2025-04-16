@@ -1,0 +1,273 @@
+---
+title: "SGAT locations from trn files"
+author: "Diego Vicente-Sastre"
+format: html
+editor: visual
+date-modified: today
+# bibliography: references.bib
+execute: 
+  echo: true
+  warning: false
+  message: false
+---
+
+## 1. Introduction: modelling GLS positions
+
+## 2. Load packages and functions
+
+All packages we need for the analyses have been installed in the previous script. At this step, we only need to load them.
+
+```{r loading_func, include=TRUE}
+# Installing all the packages and load their libraries we need to run the script
+
+pacman::p_load('readxl', # opening Excels and csv
+               'tidyverse',  #manging data
+               'lubridate', # dealing with dates
+               'maps', 'rworldmap', 'maptools', # plot world maps
+               'GeoLight', 'BAStag', 'TwGeos','SGAT', # geolocator data
+               'evaluate', # check errors
+               'ggplot2', 'viridis', 'cowplot', 'patchwork'# plots
+)
+
+```
+
+We also load own functions, specifically designed for working with GLS data.
+
+```{r}
+
+source('functions/01_FUNCTIONS_Supervised_GLS_calibrations.R')
+
+```
+
+## 3. Read metadata and calibration parameters
+
+```{r load_data, include=FALSE, echo=F, message=F, warning=F}
+
+mdata2 <- read_csv('input/GLS.files2.csv', col_names = TRUE)
+head(mdata2)
+calibs <- read_csv('output/Supervised_calibrations_SGAT.csv')
+head(calibs)
+calib.sum <- read.csv('output/Summary_SGAT_calibrations.csv')
+head(calib.sum)
+col.days <- read_csv('input/colony_days.csv')
+```
+
+In this step we include apart the **metadata and calibrations files**, a file that contains the dates **the animal has been at the colony**. This dates has been determined regarding the days the GLS recorded no-light (i.e., the animal is inside the burrow) and the nights the animal spent more the 75% of the night in dry (i.e., animal was close enough to the colony area, flying and resting on land).
+
+For more the details, see...
+
+## 4. Processing twilight events data into tracking data
+
+We will work again through a **loop** to process all the GLS.
+
+### 4.1. Read GLS information
+
+We load all the information we have load in previous scripts, adding the calibration parameters and reading the trn file with the twilight events data.
+
+```{r}
+i=1
+
+info<-mdata2[i,]
+trnfile <- if_else(!is.na(info$File.trn), info$File.trn, NA)
+trnfile_c <- paste0('output/', trnfile)
+
+# Trip information
+ring<- info$Ring # individual
+sp <- info$Sp # species
+geoID<-info$geo_alfanum # Which GLS is processing
+geo_trip<-info$geo_trip # which GLS trip is selecting
+
+LoggerModel<-info$Modelo #logger model
+Producer<- info$Producer #company
+
+# Colony infomation
+col.name <- info$Colony
+col_lat <- info$Colony.lat
+col_lon <- info$Colony.lon
+
+# Dates information
+year_rec <- info$Year_rec # which year we recovered the GLS
+
+start_date<-as.Date(info$start_date, tz = 'GMT') # date start the trip
+start_year<-year(start_date) # year start the trip
+end_date <-as.Date(info$end_date, tz = 'GMT') # date end the trip
+end_year<-year(end_date) # year end the trip
+
+cat(paste0('Processing geo (',i,') ', geo_trip, ' for year ',
+           year_rec, ' from ', col.name),  '\n')
+
+#### 2.1 Load .trn file ####
+trn<-read_csv(trnfile_c, col_names = T, show_col_types = F)
+twl<- trn %>%
+  filter(Twilight >= start_date & Twilight <= end_date)%>% # cut data
+  distinct(Twilight, .keep_all = TRUE)%>%  # remove duplicated rows 
+  arrange(Twilight)
+
+# If any GLS has not calibration parameters, we select the mean for this producer, colony and year
+calib.param <- select_sunAngle(producer = Producer, col.name, year = year_rec,
+                                calib.sum, calibs, param = T)
+zenith <- calib.param$zenith_mean
+zenith0 <- calib.param$zenith0_mean
+alpha <- calib.param$alpha
+```
+
+### 4.2. Determine tol parameter
+
+As Lisosvki et al. (2019) mentioned, tol is a parameter to modulate the tolerance on the sine of the solar declination
+
+```{r}
+
+# Select equinox peridos
+
+Sep_eq <- as.Date(paste0(start_year, '-09-21'))
+Mar_eq <- as.Date(paste0(end_year, '-03-21'))
+
+tol_res <- calc_tol(twl, n = 0.001, d = 20,
+                    Sep_eq, Mar_eq, k1 = 0.95, k2= 0.5, 
+                    plot = T)
+
+tol_res$plot
+```
+
+### 4.3. SGAT initial path
+
+```{r}
+
+# Dividning trip to calculate path with different tol values for each equinox
+if(!is.null(tol_res$tol_mar)){
+  twl_1 <- twl %>%
+    filter(Twilight >= start_date & Twilight <= paste0(end_year,'-01-01'))
+  twl_2 <- twl %>%
+    filter(Twilight > paste0(end_year,'-01-01') & Twilight <= end_date)
+  
+  path_1 <- thresholdPath(twl_1$Twilight, twl_1$Rise, zenith = zenith, tol=tol_res$tol_sep)
+  x0_1 <- path_1$x
+  t1 <- path_1$time
+    
+  path_2 <- thresholdPath(twl_2$Twilight, twl_2$Rise, zenith = zenith, tol=tol_res$tol_mar)
+  x0_2 <- path_2$x
+  t2 <- path_2$time
+  
+  x0 <- rbind(x0_1, x0_2)
+  time <- c(t1, t2)
+  
+} else {
+  path <- thresholdPath(twl$Twilight, twl$Rise, zenith = zenith, tol=tol_res$tol_sep)
+  x0 <- path$x
+  time <- path$time
+}
+
+
+cat('Initial path determined','\n')
+
+# Plot the track
+p1 <- plot_SGAT(x0, time, d = 20, Sep_eq, Mar_eq, world, col_lat, col_lon)
+p1
+```
+
+### 4.4. Save SGAT raw track
+
+```{r}
+raw.points<-cbind(time, x0)
+
+colnames(raw.points)<-c('Date_Time', 'lon', 'lat')
+
+if(is.null(raw.points)){
+  message(paste0('There is no trip from ', geoID, ' - Skipped \n'))
+  mdata2[i, 24] <- 'No'
+  next
+}else{
+  mdata2[i, 24] <- 'Yes'
+  cat(paste0('Raw points from ', geoID, ' plotted \n'))
+}
+
+# Add information
+raw.points<-bind_cols(Ring = ring, Species = sp, Colony = col.name, geoID = geoID,
+                      geo_trip = geo_trip, Producer = Producer,
+                      start_year = start_year, end_year = end_year, 
+                      tol_sep = tol_res$tol_sep, tol_mar = tol_res$tol_mar, raw.points)
+```
+
+### 4.5. Clean SGAT positions through colony days information
+
+```{r}
+#### Define known locations ####
+# Here we assign that the bird is in the colony the days that is not recorded light (inside the nest)
+# and during the breeding period the dry periods of the day were longer than 12 hours.
+
+cdays <- col.days%>%
+  dplyr::filter(geo_trip == .env$geo_trip)%>%
+  filter(light == T | wetdry == T)
+
+
+# Create an auxiliary dataframe, to filter the dates 
+auxi <- data.frame(date = as.Date(time))
+auxi <-cbind(auxi, as.data.frame(x0),row = row_number(auxi))
+auxi <- auxi %>%
+  filter(date %in% cdays$date)
+
+auxi <- left_join(auxi, cdays[,c(3,6,9)])
+# Define the locations in the colony as TRUE
+fixedx <- rep(0, nrow(x0))
+
+fixedx[auxi[is.na(auxi$wetdry),]$row] <- 3
+fixedx[auxi[auxi$wetdry == T,]$row] <- 2
+fixedx[auxi[auxi$light == T,]$row]  <- 1
+fixedx[1:2] <- 1 # first two location estimates
+
+# The last line assign the last position in the colony
+# If we use resuscitated GLSs we do not use
+if(end_date == as.Date(twl$Twilight[nrow(twl)]))
+{fixedx[(nrow(x0) - 1):nrow(x0)] <- 1 # last two location estimates
+}else{
+  fixedx[(nrow(x0) - 1):nrow(x0)] <- 0 # be sure resuscitated files have not return to the colony
+}
+
+# Generate a random point 50 km away from the given point
+for (k in which(fixedx != 0)) {
+  code <- fixedx[k]
+  if(code == 1) {
+    x0[k, 1] <- col_lon
+    x0[k, 2] <- col_lat
+  } else if (code == 2){
+    random_p <- geosphere::destPoint(p = c(col_lon, col_lat),
+                                     b = runif(1, 0, 360), d = 100*1000)
+    lat <- as.numeric(random_p[2])
+    lon <- as.numeric(random_p[1])
+    
+    x0[k, 1] <- lon
+    x0[k, 2] <- lat
+  } 
+}
+```
+
+```{r, echo=TRUE, include=TRUE, eval=FALSE}
+which(fixedx == TRUE)
+x0[fixedx, 1] <- col_lon
+which(x0 == col_lon)
+x0[fixedx, 2] <- col_lat
+which(x0 == col_lat)
+```
+
+```{r}
+
+# Plot the track
+p2 <- plot_SGAT(x0, time, d = 20, Sep_eq, Mar_eq, world, col_lat, col_lon)
+p2
+cat('Colony days corrected','\n')
+
+# Raw trip
+raw.points2<-cbind(time, x0)
+colnames(raw.points2)<-c('Date_Time', 'lon', 'lat')
+
+# Add information
+raw.points2<-bind_cols(Ring = ring, Species = sp, Colony = col.name, geoID = geoID,
+                       geo_trip = geo_trip, Producer = Producer,
+                       start_year = start_year, end_year = end_year, 
+                       tol_sep = tol_res$tol_sep, tol_mar = tol_res$tol_mar,
+                       raw.points2)
+
+write_csv(raw.points2, 
+          file = paste0('output/', geo_trip, '_', sp,'_', year_rec,'_',col.name, '_SGAT.csv'))
+
+```
