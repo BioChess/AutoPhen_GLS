@@ -267,7 +267,18 @@ raw.points2<-bind_cols(Ring = ring, Species = sp, Colony = col.name, geoID = geo
                        tol_sep = tol_res$tol_sep, tol_mar = tol_res$tol_mar,
                        raw.points2)
 
-write_csv(raw.points2, 
-          file = paste0('output/', geo_trip, '_', sp,'_', year_rec,'_',col.name, '_SGAT.csv'))
+```
 
+## 5. Save SGAT raw tracks
+
+
+```{r, echo=TRUE, include=TRUE, eval=FALSE}
+raw_trips.list[i]<-list(raw.points)
+raw_trips2.list[i]<-list(raw.points2)
+
+raw_trips <- plyr::ldply(raw_trips.list, data.frame)
+raw_trips2 <- plyr::ldply(raw_trips2.list, data.frame)
+
+write_csv(raw_trips, '/output/Raw_migratory_trips_tol_v3.csv')
+write_csv(raw_trips2, '/output/Raw_migratory_trips_tol_cdays_v3.csv')
 ```
