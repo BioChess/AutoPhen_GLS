@@ -270,7 +270,7 @@ raw.points2<-bind_cols(Ring = ring, Species = sp, Colony = col.name, geoID = geo
 ```
 
 ## 5. Save SGAT raw tracks
-
+After running a loop with all the GLS files, we can save two csv files with all the tracks. One with the raw tracks and another with the corrected tracks using the colony days information.
 
 ```{r, echo=TRUE, include=TRUE, eval=FALSE}
 raw_trips.list[i]<-list(raw.points)
