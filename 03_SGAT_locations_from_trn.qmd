@@ -279,6 +279,6 @@ raw_trips2.list[i]<-list(raw.points2)
 raw_trips <- plyr::ldply(raw_trips.list, data.frame)
 raw_trips2 <- plyr::ldply(raw_trips2.list, data.frame)
 
-write_csv(raw_trips, '/output/Raw_migratory_trips_tol_v3.csv')
-write_csv(raw_trips2, '/output/Raw_migratory_trips_tol_cdays_v3.csv')
+write_csv(raw_trips, '/output/Raw_SGAT_tracks_tol.csv')
+write_csv(raw_trips2, '/output/Raw_SGAT_tracks_tol_cdays.csv')
 ```
