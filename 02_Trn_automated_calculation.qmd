@@ -278,5 +278,5 @@ cat('Trn from geo (', i,') ',geo_trip, ' is saved \n')
 mdata[i, c(21:23)] <- list(file.trn, 'Data', 'No')
 
 
-
+write_csv(mdata, file = 'input/GLS.files2.csv')
 ```

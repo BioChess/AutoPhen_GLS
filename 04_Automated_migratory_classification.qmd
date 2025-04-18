@@ -38,4 +38,316 @@ We also load own functions, specifically designed for working with GLS data.
 source('functions/02_FUNCTIONS_automated_phenology.R') 
 ```
 
-## 3. Read metadata and calibration parameters
+## 3. Load tracking data and metada
+
+```{r}
+mdata3 <- read_csv('Raw Data/GLS.files3.csv', col_names = TRUE)
+
+# dataset <- 'v1'
+tracks <- read_csv('output/Raw_SGAT_tracks_tol_cdays.csv', col_names = TRUE)
+
+```
+
+
+## 4. Defining trajectory metrics
+We define the trajectory metrics that we will use to classify the migratory behaviour of the individuals.
+```{r}
+# Core variables (non-optional)
+core.v <- c("straightness", "sinuosity", "ang_vector")
+
+# Define the non-paired variables
+add.v <- c("mu.dist", "sd.dist", "Emax", "sq_disp", "R2n_sd", "dc_mean", "dc_sd")
+
+# Paired variables
+pair.v <- list(
+  mu_xy = c("mu.x", "mu.y"),
+  sd_xy = c("sd.x", "sd.y"),
+  mu_dxy = c("mu.dx", "mu.dy"),
+  sd_dxy = c("sd.dx", "sd.dy")
+)
+
+# Create a list of all variable groups (paired and non-paired)
+all_variable_groups <- c(names(pair.v), add.v)
+```
+
+```{r}
+i= 1
+
+
+geo_trip <- ids[i] #GLS id
+
+info<- GLS.files%>%dplyr::filter(geo_trip == .env$geo_trip)
+geoID <- info$geo_alfanum
+Ring<- info$Ring #Bird ID
+Sp <- info$Sp
+resucitat<-info$Resucitat
+
+# Colony info
+col.name <- info$Colony
+col.lon = info$Longitude
+col.lat = info$Latitude
+
+colony_sf<-colony%>%
+  st_as_sf(coords = c("Longitude", "Latitude"),
+           crs = projections$WGS84, agr = "constant")
+
+cdays <- colony_days%>%
+  dplyr::filter(geo_trip == .env$geo_trip & light == T)
+
+trip<-data_clean%>%
+  dplyr::filter(ID == geo_trip)
+
+#Ensure first position is the colony
+# trip$Longitude[1] <- colony$Longitude
+# trip$Latitude[1] <- colony$Latitude
+if(nrow(trip) == 0){
+  message('There is no trip positions for geo (', i, ') ', geo_trip, '\n')
+  next
+}
+
+start_year <-  year(trip$DateTime[1]) #Trip start
+end_year <- year(trip$DateTime[nrow(trip)]) #Trip end
+
+cat('Processing geo (', i,') ', geo_trip, 'since', start_year, 'to', end_year, 
+    ' from ', col.name,  '\n')
+# 6. Segmentation/Clustering of the track ####
+
+# Trajectory format 
+# R2n	= the squared net displacement between the current relocation 
+# and the first relocation of the trajectory
+ltraj <- as.ltraj(xy = trip[,c('Longitude','Latitude')],
+                  date = trip$DateTime,
+                  id = trip$ID)
+df_trip <- ltraj[[1]]
+if(geo_trip == '1600004001') df_trip <- df_trip[-c(1,2),]
+
+
+
+
+# Determine if there are movement during equinox days
+# Select equinoxes
+Sept_eq <- pull(equinox[equinox$Year == start_year,2])
+Mar_eq <- pull(equinox[equinox$Year == end_year,4])
+
+
+df_trip2 <- clean_positions(data = df_trip, dist_threshold = 40)
+
+# if(geo_trip %in% c('1606001001', '19204002001', '2293003001',
+#                    '23287001001','23287001001', '23290004001',
+#                    '23349001001', 'BD811003001', 'BH072001001', 
+#                    'BH176002001', 'N814001001', 'X241001001')) next # add to bad trips or check if they need a different tol
+
+if(geo_trip == 'BL224002001') {
+  df_trip <- df_trip %>%
+    filter(dy != 0)
+  ltraj <- as.ltraj(xy = df_trip[,c('x','y')],
+                    date = df_trip$date,
+                    id = geo_trip)
+  df_trip <- ltraj[[1]]
+  df_trip2 <- df_trip %>%
+    filter(dist < 30)
+  
+}
+# Subset to use after seg/clust analysis
+df_cdays <-  df_trip2%>%
+  filter(as.Date(date) %in% cdays$date)%>%
+  add_column(Breed = 'B')
+
+df_trip3 <- remove_duplicates(data = df_trip2, equinox_days = 20, 
+                              cdays = cdays,
+                              Sept_eq = Sept_eq, Mar_eq = Mar_eq, dup_threshold = 4)
+if(any(duplicated(tail(df_trip3$y, 5)))){
+  df_trip3 <- df_trip3[1:(nrow(df_trip3) - 5),]
+} else if (any(duplicated(head(df_trip3$y, 5)))){
+  df_trip3 <- df_trip3[5:nrow(df_trip3),]
+}
+
+# Correct R2n values, according to the real distance to the colony
+df_trip3 <- df_trip3 %>%
+  mutate(R2n = (x - col.lon)^2 + (y - col.lat)^2)
+
+# if(geo_trip == 'BM283002001') df_trip3 <- df_trip3 %>%filter(dist < 10)
+if(geo_trip == 'BD137001001') df_trip3 <- df_trip3 %>%filter(dist < 25)
+if(geo_trip == 'X248001001') df_trip3 <- df_trip3[-c(1,2),]
+if(geo_trip == '19094002001') df_trip3 <- df_trip3[1:521,]
+if(geo_trip == '1602002001') df_trip3 <- df_trip3[36:(nrow(df_trip3)-6),]
+# if(geo_trip == 'BM271004001') df_trip3 <- df_trip3[1:(nrow(df_trip3)-1),]
+
+# Segmentation/clustering of the hole trip
+mode_segclust <- segclust(df_trip3,
+                          Kmax = 15,
+                          lmin = 5,
+                          ncluster = 5:10,
+                          seg.var = c('x', 'y'),
+                          # seg.var = c('R2n','dist'),
+                          order.var = 'x',
+                          diag.var = c('dx', 'dy', 'R2n', 'x', 'y', 'dist'),
+                          subsample = F)
+
+# Results of segmentation/clustering
+# Plots
+segclust_plot <- plot(mode_segclust) # variables distribution
+map_seg <- segmap(mode_segclust, pointsize = 3, 
+                  coord.names = c("x","y"), interactive = F
+) # map segmentation
+# segclust_plot
+# map_seg
+# Check likelihood of alternative number of segment possible. There should
+# be a clear break if the segmentation is good
+bic <- BIC(mode_segclust)
+bic_max <- bic %>% filter(BIC == max(BIC))
+BIC_plot<-plot_BIC(mode_segclust)
+
+# Number of segments
+nseg <- bic_max$nseg
+# Number of clusters
+ncluster <- bic_max$ncluster
+
+# 7. Re-classification of the segments ####
+
+# Segments' reclassification to infer biological meaning
+# segs <- segment(mode_segclust)
+segments1 <- segment_classification(mode_segclust = mode_segclust,
+                                    # projection = projection,
+                                    option.by = 'seg',
+                                    col.lon = col.lon,
+                                    col.lat = col.lat)
+# Equinox correction
+segments2 <- equinox_interference(df_seg = segments1$df_clust, track = df_trip3,
+                                  Sept_eq, Mar_eq)
+
+
+segments3 <- segment_correction(df_seg = segments2)
+
+segments3 <- segments3 %>%
+  mutate(
+    Check = case_when(
+      Confidence < 2 ~ 'Check',
+      Confidence >= 2 & Eq & !(row_number() %in% c(1, n())) & 
+        (lag(Breed) != Breed | lead(Breed) != Breed) ~ 'Check',
+      TRUE ~ 'Ok'
+    )
+  )
+segments3 <- cbind(ID = geo_trip, Sp = Sp, segments3)
+
+seg.list2[i] <- list(segments3)
+
+# Resulting data.frame
+df_trip4 <-segclust2d::augment(mode_segclust)
+
+df_trip5 <- df_trip4 %>%
+  # left_join(., df_trip4)%>%
+  # Join Breed to hole track
+  mutate(
+    Breed = pmap_chr(
+      list(date = date),
+      ~ {
+        idx <- which(segments3$f_day <= ..1 & segments3$l_day >= ..1)
+        if (length(idx) > 0) {
+          segments3$Breed[idx[1]]
+        } else {
+          NA_character_
+        }
+      }
+    )) %>%
+  distinct() %>%
+  # arrange(date) %>%
+  add_column(ID = geo_trip) %>%
+  dplyr::select(ID, everything()) %>%
+  # tidyr::fill(Breed, .direction = "down")%>%
+  # tidyr::fill(state, .direction = "down")%>%
+  # tidyr::fill(state_ordered, .direction = "down")%>%
+  mutate(Breed2 = case_when(
+    Breed == 'mig' & cumsum(replace_na(Breed == 'W', FALSE)) > 0 & 
+      rev(cumsum(rev(replace_na(Breed == "W", FALSE)))) == 0 ~ 'mig2',
+    Breed == "mig" & rev(cumsum(rev(replace_na(Breed == "W", FALSE)))) > 0 ~ "mig1", 
+    TRUE ~ Breed
+  )) %>%
+  mutate(Equinox = ifelse(
+    date >= (as.Date(Sept_eq) - days(20)) & 
+      date <= (as.Date(Sept_eq) + days(20)), 'Sep',
+    ifelse(
+      date >= (as.Date(Mar_eq) - days(20)) & 
+        date <= (as.Date(Mar_eq) + days(20)), 'Mar', 'No'
+    )
+  ))
+
+tracks_list[i] <- list(df_trip5)
+
+plot_list <- plot_segmentation(segclust = segclust_plot, map = map_seg, 
+                               segclass = segments3, 
+                               col.lon = colony$Longitude, col.lat = colony$Latitude,
+                               breed = T, data = df_trip5,
+                               world = world, option = 'all')
+
+
+# plot_save <- plot_list$segclust | (plot_list$map / plot_list$segclass) | plot_list$breed
+plot_save <- plot_list$map | plot_list$breed
+
+
+ggsave(plot = plot_save,
+       filename = paste0(wd,'/Plots/Phenology/', 
+                         geo_trip, '_', end_year,'_', Sp, '_', col.name, '_',
+                         'seg-clust.jpg'),
+       width = 42, height = 18, units = 'cm')
+
+cat('First plot saved \n')
+
+# Detect resident individuals
+if(all(segments3$Breed != 'W') | all(segments3$Breed != 'B') |
+   all(segments3$index_seg2[which(segments3$Breed == 'W')] < 20)){
+  Migrant <- 'Resident'
+  
+  phen <- data.frame(Ring = Ring, Sp = Sp, Colony = col.name,
+                     ID = geo_trip, Migrant = Migrant,  
+                     BA_dep = as.POSIXct(NA), WA_arr = as.POSIXct(NA),
+                     WA_dep = as.POSIXct(NA), BA_arr = as.POSIXct(NA)
+  )
+  phen <- phen %>%
+    mutate(across(c(BA_dep, WA_arr, WA_dep, BA_arr), as.Date))
+  
+  phen.list[i] <- list(phen)
+  
+  cat('Phenology from geo (', i, ')', geo_trip, 'cannot be calculated \n')
+  cat('Track classified as resident \n')
+} else { 
+  Migrant <- 'Migrant'
+  cat('Track classified as migrant \n')
+}
+
+# Summary of segmentation/clustering information
+seg_df <- data.frame(Ring = Ring, Sp = Sp, Colony = col.name,
+                     ID = geo_trip, Migrant = Migrant,
+                     n_seg = nseg, n_cluster = ncluster, 
+                     Breed_class = paste(segments3$Breed, collapse = '-'),
+                     n_seg_B = length(segments3$Breed[segments3$Breed == 'B']),
+                     n_seg_mig = length(segments3$Breed[segments3$Breed == 'mig']),
+                     n_seg_W = length(segments3$Breed[segments3$Breed == 'W']),
+                     Confidence_0 = mean(segments2$Confidence, na.rm = T)/3,
+                     Confidence = mean(segments3$Confidence, na.rm = T)/3,
+                     Metrics = paste(segments1$metrics, collapse = '-')
+                     
+)
+seg.list[i] <- list(seg_df)
+
+if(Migrant == 'Resident') next
+
+pBA_dep <- first(which(df_trip5$Breed == 'mig'))
+pWA_arr <- first(which(df_trip5$Breed == 'W'))
+pWA_dep <- last(which(df_trip5$Breed == 'W')) + 1
+pBA_arr <- last(which(df_trip5$Breed == 'mig')) + 1
+
+BA_dep <- as.Date(df_trip5$date[pBA_dep])
+WA_arr <- as.Date(df_trip5$date[pWA_arr])
+WA_dep <- as.Date(df_trip5$date[pWA_dep])
+BA_arr <- as.Date(df_trip5$date[pBA_arr])
+
+phen <- data.frame(Ring = Ring, Sp = Sp, Colony = col.name,
+                   ID = geo_trip, Migrant = Migrant,  
+                   BA_dep = BA_dep, WA_arr = WA_arr,
+                   WA_dep = WA_dep, BA_arr = BA_arr
+)
+phen <- phen %>%
+  mutate(across(c(BA_dep, WA_arr, WA_dep, BA_arr), as.Date))
+```
+
