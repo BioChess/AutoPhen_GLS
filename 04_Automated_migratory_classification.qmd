@@ -1,0 +1,35 @@
+---
+title: "Automated migratory classification"
+author: "Diego Vicente-Sastre"
+format: html
+editor: visual
+date-modified: today
+# bibliography: references.bib
+execute: 
+  echo: true
+  warning: false
+  message: false
+---
+
+## 
+
+## 1. Introduction: segmentation and clustering migration behaviours
+
+## 2. Load packages and functions
+
+For th
+
+```{r}
+pacman::p_load('devtools',
+               'tidyverse', 'plyr', 'lubridate', 'readxl', 'readr', # data carpenter
+                'sf', 'spData', # spatial data
+               'adehabitatHR',  # migrate behaviour and kernels
+               'segclust2d', # spatial segmentation and clustering
+               'units', 
+               'ggplot2', 'ggpubr', 'ggspatial',# plots
+               'patchwork', 'cowplot', # composing plots
+               'caTools'# runmean and runmin calcs
+)
+```
+
+is step, we will need some additional packages. We install new ones and load
