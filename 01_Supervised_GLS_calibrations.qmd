@@ -63,7 +63,7 @@ if ("purrr" %in% .packages()){
 Lastly, we load own functions, specifically designed for working with GLS data.
 
 ```{r extra_func}
-source("functions/01_FUNCTIONS_Supervised_GLS_calibrations.R") # simplify working with GLS data
+source("functions/01_FUNCTIONS_GLS_analysis.R") # simplify working with GLS data
 
 ```
 

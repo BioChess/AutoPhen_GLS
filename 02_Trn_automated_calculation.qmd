@@ -37,7 +37,7 @@ We also load own functions, specifically designed for working with GLS data.
 source('functions/FUNCTION_twilight_cleanup.R')
 source('functions/FUNCTION_move_twilights.R')
 
-source('functions/01_FUNCTIONS_Supervised_GLS_calibrations.R')
+source('functions/01_FUNCTIONS_GLS_analysis.R')
 ```
 
 ## 3. Read metadata and calibration parameters

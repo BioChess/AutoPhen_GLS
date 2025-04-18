@@ -17,7 +17,7 @@ execute:
 
 ## 2. Load packages and functions
 
-For th
+Every time we do not need to install and load packages from GitHub or other external repository, we use `pacman` function. For the following code, we need two main packages `adehabitatHR` and `segclust2d` packages
 
 ```{r}
 pacman::p_load('devtools',
@@ -32,4 +32,10 @@ pacman::p_load('devtools',
 )
 ```
 
-is step, we will need some additional packages. We install new ones and load
+We also load own functions, specifically designed for working with GLS data.
+
+```{r}
+source('functions/02_FUNCTIONS_automated_phenology.R') 
+```
+
+## 3. Read metadata and calibration parameters
