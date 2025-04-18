@@ -281,4 +281,6 @@ raw_trips2 <- plyr::ldply(raw_trips2.list, data.frame)
 
 write_csv(raw_trips, '/output/Raw_SGAT_tracks_tol.csv')
 write_csv(raw_trips2, '/output/Raw_SGAT_tracks_tol_cdays.csv')
+
+write_csv(mdata2, file = 'input/GLS.files3.csv')
 ```
