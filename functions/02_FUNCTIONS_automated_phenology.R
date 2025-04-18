@@ -81,6 +81,13 @@ remove_duplicates <- function(data = df_trip, equinox_days = 20,
       distinct(y, .keep_all = T)
     cat('Other duplicated latitudes has been removed \n')
   }
+  
+  if(any(duplicated(tail(data$y, 5)))){
+    df_trip3 <- data[1:(nrow(data) - 5),]
+  } else if (any(duplicated(head(data$y, 5)))){
+    df_trip3 <- data[5:nrow(data),]
+  }
+  
   if(nrow(data) == n) cat('No duplicates found \n')
   
   return(data)
