@@ -26,6 +26,7 @@ Some packages require to be installed remotely from other repositories outside o
 ```{r install_pkgs, include = TRUE, eval= FALSE}
 
 # Both packages allow us to download packages from external repositories as GitHub
+install.packages("pacman")
 install.packages("devtools")
 library(devtools)
 install.packages("remotes")

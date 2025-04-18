@@ -23,10 +23,9 @@ All packages we need for the analyses have been installed in the previous script
 pacman::p_load('readxl', # opening Excels and csv
                'tidyverse',  #manging data
                'lubridate', # dealing with dates
-               'maps', 'rworldmap', 'maptools', # plot world maps
-               'GeoLight', 'BAStag', 'TwGeos','SGAT', # geolocator data
+               'SGAT', # geolocator data
                'evaluate', # check errors
-               'ggplot2', 'viridis', 'cowplot', 'patchwork'# plots
+               'ggplot2', 'cowplot', 'patchwork'# plots
 )
 
 ```
@@ -270,6 +269,7 @@ raw.points2<-bind_cols(Ring = ring, Species = sp, Colony = col.name, geoID = geo
 ```
 
 ## 5. Save SGAT raw tracks
+
 After running a loop with all the GLS files, we can save two csv files with all the tracks. One with the raw tracks and another with the corrected tracks using the colony days information.
 
 ```{r, echo=TRUE, include=TRUE, eval=FALSE}
