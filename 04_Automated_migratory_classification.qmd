@@ -48,9 +48,10 @@ tracks <- read_csv('output/Raw_SGAT_tracks_tol_cdays.csv', col_names = TRUE)
 
 ```
 
-
 ## 4. Defining trajectory metrics
+
 We define the trajectory metrics that we will use to classify the migratory behaviour of the individuals.
+
 ```{r}
 # Core variables (non-optional)
 core.m <- c("straightness", "sinuosity", "ang_vector")
@@ -91,9 +92,6 @@ col.name <- info$Colony
 col.lon = info$Colony.lon
 col.lat = info$Colony.lat
 
-cdays <- colony_days%>%
-  dplyr::filter(geo_trip == .env$geo_trip & light == T)
-
 track <- tracks%>%
   filter(geo_trip == .env$geo_trip)
 
@@ -106,72 +104,56 @@ cat('Processing geo (', i,') ', geo_trip, 'since', start_year, 'to', end_year,
 
 ### 4.2. Prepare track to be segmented
 
-Segmentation and clustering by segclust2d package requires a trajectory class object. In addition, 
+Segmentation and clustering by segclust2d package requires:
+
+-   **Trajectory class** object
+
+-   **Avoid low variance** segments
+
+Additionally, if we are managing GLS data, we have to ensure **first position is at the colony**. In that way, we use Net Squared Colony Distance (NSCD) instead of Net Squared Distance (NSD).
 
 ```{r}
-# 6. Segmentation/Clustering of the track ####
-
 # Trajectory format 
-# R2n	= the squared net displacement between the current relocation 
-# and the first relocation of the trajectory
-ltraj <- as.ltraj(xy = trip[,c('Longitude','Latitude')],
-                  date = trip$DateTime,
-                  id = trip$ID)
-df_trip <- ltraj[[1]]
-if(geo_trip == '1600004001') df_trip <- df_trip[-c(1,2),]
+# R2n	= the squared net displacement between the current relocation and the first relocation of the trajectory (NSD)
+ltraj <- as.ltraj(xy = as.matrix(track[,c('lon','lat')]),
+                  date = track$Date_Time,
+                  id = track$geo_trip)
+track_df <- ltraj[[1]]
+```
 
+Transforming into ltraj object, we can get two things at once: (1) x and y columns as coordinates of the track and (b) several movement metrics can be useful for segmentation, clustering and classification of the segments.
 
-
-
+```{r}
 # Determine if there are movement during equinox days
 # Select equinoxes
-Sept_eq <- pull(equinox[equinox$Year == start_year,2])
-Mar_eq <- pull(equinox[equinox$Year == end_year,4])
+Sep_eq <- as.Date(paste0(start_year, '-09-21'))
+Mar_eq <- as.Date(paste0(end_year, '-03-21'))
+```
+
+Optionally we can remove colony days if they cause low-variance segments 
+```{r}
+cdays <- colony_days%>%
+  dplyr::filter(geo_trip == .env$geo_trip)
+```
 
 
+```{r}
+# Clean erroneus positions
 df_trip2 <- clean_positions(data = df_trip, dist_threshold = 40)
 
-# if(geo_trip %in% c('1606001001', '19204002001', '2293003001',
-#                    '23287001001','23287001001', '23290004001',
-#                    '23349001001', 'BD811003001', 'BH072001001', 
-#                    'BH176002001', 'N814001001', 'X241001001')) next # add to bad trips or check if they need a different tol
-
-if(geo_trip == 'BL224002001') {
-  df_trip <- df_trip %>%
-    filter(dy != 0)
-  ltraj <- as.ltraj(xy = df_trip[,c('x','y')],
-                    date = df_trip$date,
-                    id = geo_trip)
-  df_trip <- ltraj[[1]]
-  df_trip2 <- df_trip %>%
-    filter(dist < 30)
-  
-}
-# Subset to use after seg/clust analysis
-df_cdays <-  df_trip2%>%
-  filter(as.Date(date) %in% cdays$date)%>%
-  add_column(Breed = 'B')
-
 df_trip3 <- remove_duplicates(data = df_trip2, equinox_days = 20, 
-                              cdays = cdays,
+                              # cdays = cdays,
                               Sept_eq = Sept_eq, Mar_eq = Mar_eq, dup_threshold = 4)
-if(any(duplicated(tail(df_trip3$y, 5)))){
-  df_trip3 <- df_trip3[1:(nrow(df_trip3) - 5),]
-} else if (any(duplicated(head(df_trip3$y, 5)))){
-  df_trip3 <- df_trip3[5:nrow(df_trip3),]
-}
+
 
 # Correct R2n values, according to the real distance to the colony
 df_trip3 <- df_trip3 %>%
   mutate(R2n = (x - col.lon)^2 + (y - col.lat)^2)
 
-# if(geo_trip == 'BM283002001') df_trip3 <- df_trip3 %>%filter(dist < 10)
-if(geo_trip == 'BD137001001') df_trip3 <- df_trip3 %>%filter(dist < 25)
-if(geo_trip == 'X248001001') df_trip3 <- df_trip3[-c(1,2),]
-if(geo_trip == '19094002001') df_trip3 <- df_trip3[1:521,]
-if(geo_trip == '1602002001') df_trip3 <- df_trip3[36:(nrow(df_trip3)-6),]
-# if(geo_trip == 'BM271004001') df_trip3 <- df_trip3[1:(nrow(df_trip3)-1),]
+```
 
+
+```{r}
 # Segmentation/clustering of the hole trip
 mode_segclust <- segclust(df_trip3,
                           Kmax = 15,
