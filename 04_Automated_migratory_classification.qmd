@@ -41,7 +41,7 @@ source('functions/02_FUNCTIONS_automated_phenology.R')
 ## 3. Load tracking data and metada
 
 ```{r}
-mdata3 <- read_csv('Raw Data/GLS.files3.csv', col_names = TRUE)
+mdata3 <- read_csv('input/GLS.files3.csv', col_names = TRUE)
 
 # dataset <- 'v1'
 tracks <- read_csv('output/Raw_SGAT_tracks_tol_cdays.csv', col_names = TRUE)
@@ -53,13 +53,13 @@ tracks <- read_csv('output/Raw_SGAT_tracks_tol_cdays.csv', col_names = TRUE)
 We define the trajectory metrics that we will use to classify the migratory behaviour of the individuals.
 ```{r}
 # Core variables (non-optional)
-core.v <- c("straightness", "sinuosity", "ang_vector")
+core.m <- c("straightness", "sinuosity", "ang_vector")
 
 # Define the non-paired variables
-add.v <- c("mu.dist", "sd.dist", "Emax", "sq_disp", "R2n_sd", "dc_mean", "dc_sd")
+add.m <- c("mu.dist", "sd.dist", "Emax", "sq_disp", "R2n_sd", "dc_mean", "dc_sd")
 
 # Paired variables
-pair.v <- list(
+pair.m <- list(
   mu_xy = c("mu.x", "mu.y"),
   sd_xy = c("sd.x", "sd.y"),
   mu_dxy = c("mu.dx", "mu.dy"),
@@ -67,49 +67,48 @@ pair.v <- list(
 )
 
 # Create a list of all variable groups (paired and non-paired)
-all_variable_groups <- c(names(pair.v), add.v)
+metrics <- c(names(pair.m), add.m)
 ```
+
+## 4. Classification of tracking data
+
+We will work again through a loop.
+
+### 4.1. Read track information
 
 ```{r}
 i= 1
 
+info<- mdata3[i,]
 
-geo_trip <- ids[i] #GLS id
-
-info<- GLS.files%>%dplyr::filter(geo_trip == .env$geo_trip)
-geoID <- info$geo_alfanum
-Ring<- info$Ring #Bird ID
-Sp <- info$Sp
-resucitat<-info$Resucitat
+ring<- info$Ring # individual
+sp <- info$Sp # species
+geoID<-info$geo_alfanum # Which GLS is processing
+geo_trip<-info$geo_trip # which GLS trip is selecting
 
 # Colony info
 col.name <- info$Colony
-col.lon = info$Longitude
-col.lat = info$Latitude
-
-colony_sf<-colony%>%
-  st_as_sf(coords = c("Longitude", "Latitude"),
-           crs = projections$WGS84, agr = "constant")
+col.lon = info$Colony.lon
+col.lat = info$Colony.lat
 
 cdays <- colony_days%>%
   dplyr::filter(geo_trip == .env$geo_trip & light == T)
 
-trip<-data_clean%>%
-  dplyr::filter(ID == geo_trip)
+track <- tracks%>%
+  filter(geo_trip == .env$geo_trip)
 
-#Ensure first position is the colony
-# trip$Longitude[1] <- colony$Longitude
-# trip$Latitude[1] <- colony$Latitude
-if(nrow(trip) == 0){
-  message('There is no trip positions for geo (', i, ') ', geo_trip, '\n')
-  next
-}
-
-start_year <-  year(trip$DateTime[1]) #Trip start
-end_year <- year(trip$DateTime[nrow(trip)]) #Trip end
+start_year <-  year(track$DateTime[1]) #Trip start
+end_year <- year(track$DateTime[nrow(track)]) #Trip end
 
 cat('Processing geo (', i,') ', geo_trip, 'since', start_year, 'to', end_year, 
     ' from ', col.name,  '\n')
+```
+
+### 4.2. Prepare track to be segmented
+
+Segmentation and clustering by segclust2d package requires a trajectory class object. In addition, 
+
+```{r}
 # 6. Segmentation/Clustering of the track ####
 
 # Trajectory format 
