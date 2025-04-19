@@ -38,7 +38,7 @@ We also load own functions, specifically designed for working with GLS data.
 source('functions/02_FUNCTIONS_automated_phenology.R') 
 ```
 
-## 3. Load tracking data and metada
+## 3. Load tracking data and metadata
 
 ```{r}
 mdata3 <- read_csv('input/GLS.files3.csv', col_names = TRUE)
@@ -124,6 +124,7 @@ track_df <- ltraj[[1]]
 Transforming into ltraj object, we can get two things at once: (1) x and y columns as coordinates of the track and (b) several movement metrics can be useful for segmentation, clustering and classification of the segments.
 
 #### Cleaning tracking data for segmentation and clustering
+
 ```{r}
 # Determine if there are movement during equinox days
 # Select equinoxes
@@ -138,7 +139,7 @@ Optionally we can remove colony days if they cause low-variance segments that `s
 #   dplyr::filter(geo_trip == .env$geo_trip)
 ```
 
-First, we remove erroneus positions, where the distance among them is too large. Then, we remove possible pseudo-duplicates, low-variance segments, that can be caused by the modelling of positions along the equinox periods, the correction of the positions along colony days or another reason that cause > 4 consecutive positions with the same coordinates.
+First, we remove erroneus positions, where the distance among them is too large. Then, we remove possible pseudo-duplicates, low-variance segments, that can be caused by the modelling of positions along the equinox periods, the correction of the positions along colony days or another reason that cause \> 4 consecutive positions with the same coordinates.
 
 ```{r}
 # Clean erroneus positions
@@ -180,16 +181,17 @@ bic_plot <- plot_BIC(mode_segclust)
 segclust_plot + (map_seg / bic_plot)
 
 ```
+
 ### 4.4. Segments classification
 
 The idea behind this part of the procedure is that there are three migratory behaviours: (1) breeding, (2) wintering and (3) migration. Breeding and wintering are stationary behaviours, meanwhile wintering and migration are non-breeding behaviours. Stationary segments can be defined by low straightness and mean angle vector, and high sinuosity values; in turn, non-breeding segments can be characterize by high NSCD values.
 
-Therefore, a double hierarchical clustering is performed by `segment_class` function. And this clustering is performed repeatedly per every possible combination of metrics we use. Each classification resulting is given a confidence value. The best classification of the segments is selected by the highest confidence value. 
+Therefore, a double hierarchical clustering is performed by `segment_class` function. And this clustering is performed repeatedly per every possible combination of metrics we use. Each classification resulting is given a confidence value. The best classification of the segments is selected by the highest confidence value.
 
 Following functions, `segment_class` and `segment_correction`, get two thing to refine the resulting classification:
 
-- **Indicate segments that match with equinox periods**. Additionally, these segments get reduced the confindence value.
-- **Correct miss-classifications**. The function check some especific cases where the algorithm can fail and it review the correct classification to give to each segment.
+-   **Indicate segments that match with equinox periods**. Additionally, these segments get reduced the confindence value.
+-   **Correct miss-classifications**. The function check some especific cases where the algorithm can fail and it review the correct classification to give to each segment.
 
 ```{r}
 # 7. Re-classification of the segments ####
@@ -235,8 +237,6 @@ seg_df <- data.frame(Ring = ring, Sp = sp, Colony = col.name,
 )
 ```
 
-
-
 ### 4.5. Assignation migratory behaviour to each track position
 
 After the classification each segment in each respective behaviour, we assign this behaviour to each positions inside the segment. Also, we differenciate between post-nuptial migration (mig1) and pre-nuptial migration (mig2); and breeding pre-migration (B1) and post-migration (B2).
@@ -281,8 +281,7 @@ track_df5 <- track_df4 %>%
 
 ### 4.6. Plotting results
 
-We can plot the results of the procedure in different ways thanks to `plot_segmentation` function. 
-We can plot segmentation and clustering plot, segmentation and clustering map, phenology map and error index plot. This last plot plot the mean of the variables segmented of each segment, as coordinates and add error bars as the SD of these variables.
+We can plot the results of the procedure in different ways thanks to `plot_segmentation` function. We can plot segmentation and clustering plot, segmentation and clustering map, phenology map and error index plot. This last plot plot the mean of the variables segmented of each segment, as coordinates and add error bars as the SD of these variables.
 
 ```{r}
 plot_list <- plot_segmentation(segclust = segclust_plot, map = map_seg, 
@@ -298,21 +297,24 @@ plot_save
 
 ```
 
-
 When we are working in loops we can save the results of segmentation and migration behaviour classification in a list
 
 ```{r, eval=FALSE, include=TRUE}
 # Segments
 seg.list[i] <- list(segments3)
+seg_all <- plyr::ldply(seg.list, data.frame)
 
 # Summary of segmentation/clustering 
 seg.list2[i] <- list(seg_df)
+seg_all2 <- plyr::ldply(seg.list2, data.frame)
 
 # Track with phenology classification
 tracks_list[i] <- list(df_trip5)
+track_all <- plyr::ldply(tracks_list, data.frame)
 ```
 
 ## 5. Saving results
+
 ```{r, eval= FALSE, include = TRUE}
 write.csv(seg_all, file = 'Segmentation_results.csv')
 
@@ -320,4 +322,3 @@ write.csv(seg_all2, file = 'Summary_segmentation.csv')
 
 write_csv(track_all, file = 'Phenology_tracks.csv')
 ```
-

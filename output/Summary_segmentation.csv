@@ -1,1 +1,8 @@
-...1,ID,Sp,state,begin,end,mu.dx,sd.dx,mu.dy,sd.dy,mu.R2n,sd.R2n,mu.x,sd.x,mu.y,sd.y,mu.dist,sd.dist,state_ordered,sinuosity,straightness,ang_vector,ang_mean,Emax,sq_disp,dc_mean,dc_sd,R2n_mean,R2n_sd,index_seg,index_seg2,Clust_SM,Clust_BnB,S_M,B_nB,Breed,Confidence,f_day,l_day,Eq,Breed_0,Check
+Ring,Sp,Colony,ID,Migrant,n_seg,n_cluster,Breed_class,n_seg_B,n_seg_mig,n_seg_W,Confidence_0,Confidence,Metrics
+6134564,CALBOR,Veneguera,11001001,Migrant,13,10,B-B-B-B-B-mig-mig-W-mig-mig-B-B-B,8,4,1,0.897435897435897,0.897435897435897,Emax-straightness-sinuosity-ang_vector
+6134563,CALBOR,Veneguera,12001001,Migrant,15,10,B-B-B-B-B-B-mig-W-W-W-mig-mig-mig-B-B,8,4,3,0.755555555555556,0.822222222222222,mu.dist-straightness-sinuosity-ang_vector
+6134549,CALBOR,Veneguera,19001001,Migrant,11,10,B-B-B-B-B-mig-W-W-mig-mig-B,6,3,2,0.878787878787879,0.878787878787879,mu.dist-straightness-sinuosity-ang_vector
+6134565,CALBOR,Veneguera,33001001,Migrant,15,10,B-B-B-B-B-B-B-mig-mig-W-W-W-mig-mig-B,8,4,3,0.711111111111111,0.777777777777778,mu.dist-straightness-sinuosity-ang_vector
+6134544,CALBOR,Veneguera,41001001,Migrant,14,10,B-B-B-B-mig-mig-W-W-mig-mig-mig-B-B-B,7,5,2,0.761904761904762,0.761904761904762,Emax-straightness-sinuosity-ang_vector
+6134548,CALBOR,Veneguera,42002001,Migrant,15,10,B-B-B-B-B-B-B-B-B-mig-W-mig-B-B-B,12,2,1,0.711111111111111,0.711111111111111,sd.x-sd.y-straightness-sinuosity-ang_vector
+6134566,CALBOR,Veneguera,47001001,Migrant,15,10,B-B-B-B-B-mig-W-W-mig-mig-mig-mig-B-B-B,8,5,2,0.711111111111111,0.777777777777778,mu.dist-straightness-sinuosity-ang_vector
