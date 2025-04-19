@@ -38,8 +38,8 @@ clean_positions <- function (data = df_trip, dist_threshold = 40){
 
 ################################################################################
 
-remove_duplicates <- function(data = df_trip, equinox_days = 20, 
-                              Sept_eq = Sept_eq, Mar_eq = Mar_eq, dup_threshold = 4,
+remove_duplicates <- function(data, equinox_days = 20, 
+                              Sep_eq = Sep_eq, Mar_eq = Mar_eq, dup_threshold = 4,
                               cdays = NULL){
   
   if(!'y' %in% names(data)){
@@ -48,8 +48,8 @@ remove_duplicates <- function(data = df_trip, equinox_days = 20,
   n <- nrow(data)
   
   data <- data %>%
-    mutate(Equinox = ifelse(date >= (as.Date(Sept_eq) - days(equinox_days)) & 
-                              date <= (as.Date(Sept_eq) + days(equinox_days)), 'Sep',
+    mutate(Equinox = ifelse(date >= (as.Date(Sep_eq) - days(equinox_days)) & 
+                              date <= (as.Date(Sep_eq) + days(equinox_days)), 'Sep',
                             ifelse(date >= (as.Date(Mar_eq) - days(equinox_days)) & 
                                      date <= (as.Date(Mar_eq) + days(equinox_days)), 'Mar', 'No'))
     )
@@ -83,12 +83,18 @@ remove_duplicates <- function(data = df_trip, equinox_days = 20,
   }
   
   if(any(duplicated(tail(data$y, 5)))){
-    df_trip3 <- data[1:(nrow(data) - 5),]
+    data <- data[1:(nrow(data) - 5),]
   } else if (any(duplicated(head(data$y, 5)))){
-    df_trip3 <- data[5:nrow(data),]
+    data <- data[5:nrow(data),]
   }
   
-  if(nrow(data) == n) cat('No duplicates found \n')
+  if(nrow(data) == n){
+    cat('No duplicates found \n')
+  } else {
+    # Correct R2n values, according to the real distance to the colony
+    data <- data %>%
+      mutate(R2n = (x - col.lon)^2 + (y - col.lat)^2)
+  }
   
   return(data)
 }
@@ -97,7 +103,7 @@ remove_duplicates <- function(data = df_trip, equinox_days = 20,
 
 ################################################################################
 
-Trajmetrics <- function(trj){
+trajmetrics <- function(trj){
   
   if (!requireNamespace("trajr", quietly = TRUE)) {
     stop("The 'trajr' package is required but is not installed. 
@@ -147,7 +153,7 @@ Trajmetrics <- function(trj){
   return(out)
 }
 ################################################################################
-Calcmetrics <- function(trj_stt, begin, end) {
+calcmetrics <- function(trj_stt, begin, end) {
   metrics <- Trajmetrics(trj_stt)
   metrics$R2n_mean <- mean(trj_stt$R2n, na.rm = TRUE)
   metrics$R2n_sd <- sd(trj_stt$R2n, na.rm = TRUE)
@@ -161,49 +167,6 @@ Calcmetrics <- function(trj_stt, begin, end) {
   return(metrics)
 }
 ################################################################################
-# hclust_summary <- function(recipe, data, num_clusters = 3, method = "complete") {
-#   
-#   if (!requireNamespace("recipes", quietly = TRUE)) {
-#     stop("The 'recipes' package is required but is not installed. 
-#          Please install it before proceeding.")
-#   }
-#   if (!inherits(recipe, "recipe")) {
-#     stop("'recipe' must be a valid recipe object from the 'recipes' package.")
-#   }
-#   if (!is.data.frame(data)) {
-#     stop("'data' must be a data frame.")
-#   }
-#   if (!is.numeric(num_clusters) || num_clusters <= 0 || 
-#       floor(num_clusters) != num_clusters) {
-#     stop("'num_clusters' must be a positive integer.")
-#   }
-#   
-#   valid_methods <- c("complete", "single", "average", "ward.D", "ward.D2", "centroid", "median")
-#   if (!(method %in% valid_methods)) {
-#     stop(paste0("'", method, "' is not a valid method. Choose from: ", paste(valid_methods, collapse = ", ")))
-#   }
-#   
-#   out <- tryCatch({
-#     prepped_recipe <- recipes::prep(recipe, training = data) 
-#     baked_data <- recipes::bake(prepped_recipe, new_data = data)
-#     dist_matrix <- dist(baked_data)
-#     hclust_fit <- hclust(dist_matrix, method = method)
-#     cluster_assignments <- cutree(hclust_fit, k = num_clusters)
-#     n_members <- table(cluster_assignments)
-#     
-#     cluster_summary <- tibble::tibble(
-#       cluster = factor(paste0("Cluster_", names(n_members))),
-#       n_members = as.vector(n_members)
-#     )
-#     
-#     list(Clust = cluster_assignments, cluster_summary = cluster_summary)
-#     
-#   }, error = function(e) {
-#     cat("An error occurred while performing hierarchical clustering: ", e$message, "\n")
-#     return(NULL)
-#   })
-#   return(out)
-# }
 
 ################################################################################
 # Determining optimun R2n limit
@@ -224,10 +187,6 @@ R2n_limit <- function(x = track, plot = F){
   
   out <- tryCatch({
     suppressWarnings({
-      # quantile(round(x, digits = 2))
-      # cpt_result <- changepoint::cpt.meanvar(x$R2n, method = 'SegNeigh', penalty = 'BIC', Q = 3)
-      # x[changepoint::cpts(cpt_result)]
-
       x_segclust <- segclust(x,
                              Kmax = 3,
                              lmin = 5,
@@ -252,11 +211,11 @@ R2n_limit <- function(x = track, plot = F){
   return(out)
 }
 ################################################################################
-generate_combinations <- function(variable_groups, minv, maxv) {
+combm <- function(v = add.metrics, minv, maxv) {
   
   combinations <- list()
   for (i in minv:maxv) {
-    combs <- combn(variable_groups, i, simplify = FALSE)
+    combs <- combn(v, i, simplify = FALSE)
     combinations <- append(combinations, combs)
   }
   
@@ -267,14 +226,14 @@ generate_combinations <- function(variable_groups, minv, maxv) {
 
 ################################################################################
 
-run_clustering <- function(var_combination, df_seg, 
-                           method = "complete",
-                           num_clusters = 2, R2n = R2n) {
+run_clust <- function(var_comb, df_seg, 
+                      method = "complete",
+                      num_clusters = 2, R2n = R2n) {
   
   if (!is.data.frame(df_seg)) stop("The 'df_seg' input must be a data frame.")
   if (!is.numeric(num_clusters) || num_clusters <= 0) stop("'num_clusters' must be a positive integer.")
   
-  formula <- as.formula(paste("~", paste(var_combination, collapse = " + ")))
+  formula <- as.formula(paste("~", paste(var_comb, collapse = " + ")))
 
   recipe1 <- recipe(formula, data = df_seg) %>%
     step_normalize(all_predictors())
@@ -344,14 +303,6 @@ run_clustering <- function(var_combination, df_seg,
         TRUE ~ 0
       )
     ) %>%
-    # mutate(
-    #   Confidence = case_when(
-    #     (Breed == 'B' & lead(Breed) == 'mig' & lag(Breed) == 'mig') ~ 0,
-    #     (Breed == 'B' & lead(Breed) == 'W' & lag(Breed) == 'W') ~ 0,
-    #     (Breed != 'B' & lead(Breed) == 'B' & lag(Breed) == 'B') ~ 0,
-    #     T ~ Confidence
-    #   )
-    # ) %>%
     dplyr::select(-B_W, -mig)
   
   # Calculate the sum of confidence for this recipe
@@ -360,16 +311,17 @@ run_clustering <- function(var_combination, df_seg,
   out <-list(
     Confidence = mean_confidence,
     df_clust = df_clust,
-    metrics = var_combination
+    metrics = var_comb
   )
   return(out)
 }
 
 ################################################################################
 
-segment_classification <- function (mode_segclust =  mode_segclust,
-                                    option.by = 'seg',
-                                    col.lon = NULL, col.lat = NULL){
+segment_class <- function (mode_segclust =  mode_segclust,
+                           option.by = 'seg',
+                           add.metrics = NULL,
+                           col.lon = NULL, col.lat = NULL){
   
   required_packages <- c("trajr", "tidyverse", "segclust2d", "ClusterR", "tidymodels", "tidyclust", "furrr")
   invisible(lapply(required_packages, function(p) {
@@ -382,7 +334,6 @@ segment_classification <- function (mode_segclust =  mode_segclust,
   track <- segclust2d::augment(mode_segclust)
  
   track_trj <- TrajFromCoords(track[,c('x','y','date','R2n', 'dist', 'state')],
-                              # timeCol = 'date',
                               spatialUnits = 'km', timeUnits = 's')
   segs <- segment(mode_segclust)
   segs <- segs %>%
@@ -398,7 +349,7 @@ segment_classification <- function (mode_segclust =  mode_segclust,
       trj_stt <- track_trj[begin:end,]
       stt <- unique(trj_stt$state)
       
-      metrics <- Trajmetrics(trj_stt)
+      metrics <- trajmetrics(trj_stt)
       metrics$R2n_mean <- mean(trj_stt$R2n)
       metrics$R2n_sd <- sd(trj_stt$R2n)
       metrics$state <- unique(trj_stt$state)
@@ -431,6 +382,7 @@ segment_classification <- function (mode_segclust =  mode_segclust,
       left_join(., trj_df, by = 'state')
     
   }
+  
   R2n <- R2n_limit(track, plot = F)
   if(max(R2n) <= median(segs2$R2n_mean)){
     R2n <- max(R2n)
@@ -438,29 +390,28 @@ segment_classification <- function (mode_segclust =  mode_segclust,
     R2n <- min(R2n)
   }
 
-  
-  segs2a <- segs2 %>%
-    mutate(
-      index_seg = round(sd.x * sd.y, digits = 3),  # Segmentation index
-      index_seg2 = round(sqrt((mu.x - col.lon)^2 + (mu.y - col.lat)^2), digits = 3)  # Geographic distance index
-    )
+  if(!is.null(add.metrics)){
+    comb_metrics <- combm(add.metrics, minv = 1, maxv =3)
+    
+    # Add the base variables to each combination
+    comb_metrics2 <- lapply(comb_metrics, function(vars) {
+      expanded_vars <- unlist(lapply(vars, function(v) {
+        if (v %in% names(pair.m)) pair.m[[v]] else v
+      }))
+      unique(c(expanded_vars, 
+               setdiff(c("straightness", "sinuosity", "ang_vector"), expanded_vars)))
+    })
+  } else {
+    comb_metrics2 <- list()
+    comb_metrics2[[1]] <- list("straightness", "sinuosity", "ang_vector")
+  }
 
-  variable_combinations <- generate_combinations(all_variable_groups, 
-                                                 minv = 1, maxv =3)
-  
-  # Add the base variables to each combination
-  complete_combinations <- lapply(variable_combinations, function(vars) {
-    expanded_vars <- unlist(lapply(vars, function(v) {
-      if (v %in% names(paired_variables)) paired_variables[[v]] else v
-    }))
-    unique(c(expanded_vars, setdiff(base_variables, expanded_vars)))
-  })
   
   
-  if (!is.null(segs2a)) {
+  if (!is.null(segs2)) {
     plan(multisession)  # or plan(multicore) if supported
-    clustering_results <- future_map(complete_combinations, function(var_combination) {
-      run_clustering(var_combination, df_seg = segs2a, method = "complete", num_clusters = 2, R2n = R2n)
+    clustering_results <- future_map(comb_metrics2, function(var_combination) {
+      run_clust(var_combination, df_seg = segs2, method = "complete", num_clusters = 2, R2n = R2n)
     },
     .options = furrr_options(seed = TRUE)
     )
@@ -485,9 +436,9 @@ segment_classification <- function (mode_segclust =  mode_segclust,
 ################################################################################
 
 equinox_interference <- function(df_seg = segments1, track = df_trip2,
-                                 Sept_eq, Mar_eq){
+                                 Sep_eq, Mar_eq){
   # require(dplyr)
-  eq_dates <- c(seq(Sept_eq - days(20), Sept_eq + days(20), by = 'day'),
+  eq_dates <- c(seq(Sep_eq - days(20), Sep_eq + days(20), by = 'day'),
                 seq(Mar_eq - days(20), Mar_eq + days(20), by = 'day')
   )
   
@@ -519,7 +470,7 @@ segment_correction <- function(df_seg = segments2){
   
   median_sq_disp <- median(df_seg$sq_disp, na.rm = T)
   mean_R2n_mean <- mean(df_seg$R2n_mean, na.rm = T)
-  median_index_seg <- median(df_seg$index_seg, na.rm = T)
+
   if('Eq' %in% colnames(df_seg)){
     # Equinox interference
     df_seg <- df_seg %>%

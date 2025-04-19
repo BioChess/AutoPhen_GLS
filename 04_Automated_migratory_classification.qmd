@@ -50,16 +50,14 @@ tracks <- read_csv('output/Raw_SGAT_tracks_tol_cdays.csv', col_names = TRUE)
 
 ## 4. Defining trajectory metrics
 
-We define the trajectory metrics that we will use to classify the migratory behaviour of the individuals.
+We define the trajectory metrics that we will use to classify the migratory behaviour of the individuals. Algorithm use straightness, sinuosity and vector angle as defect, and it is suported in other accesorial variables that can refine the classification.
 
 ```{r}
-# Core variables (non-optional)
-core.m <- c("straightness", "sinuosity", "ang_vector")
 
-# Define the non-paired variables
+# Define the non-paired metrics
 add.m <- c("mu.dist", "sd.dist", "Emax", "sq_disp", "R2n_sd", "dc_mean", "dc_sd")
 
-# Paired variables
+# Paired metrics
 pair.m <- list(
   mu_xy = c("mu.x", "mu.y"),
   sd_xy = c("sd.x", "sd.y"),
@@ -67,8 +65,8 @@ pair.m <- list(
   sd_dxy = c("sd.dx", "sd.dy")
 )
 
-# Create a list of all variable groups (paired and non-paired)
-metrics <- c(names(pair.m), add.m)
+# Create a list of all metrics groups (paired and non-paired)
+add.metrics <- c(names(pair.m), add.m)
 ```
 
 ## 4. Classification of tracking data
@@ -95,8 +93,8 @@ col.lat = info$Colony.lat
 track <- tracks%>%
   filter(geo_trip == .env$geo_trip)
 
-start_year <-  year(track$DateTime[1]) #Trip start
-end_year <- year(track$DateTime[nrow(track)]) #Trip end
+start_year <-  year(track$Date_Time[1]) #Trip start
+end_year <- year(track$Date_Time[nrow(track)]) #Trip end
 
 cat('Processing geo (', i,') ', geo_trip, 'since', start_year, 'to', end_year, 
     ' from ', col.name,  '\n')
@@ -112,6 +110,8 @@ Segmentation and clustering by segclust2d package requires:
 
 Additionally, if we are managing GLS data, we have to ensure **first position is at the colony**. In that way, we use Net Squared Colony Distance (NSCD) instead of Net Squared Distance (NSD).
 
+##### Convert to trajectory class
+
 ```{r}
 # Trajectory format 
 # R2n	= the squared net displacement between the current relocation and the first relocation of the trajectory (NSD)
@@ -123,6 +123,7 @@ track_df <- ltraj[[1]]
 
 Transforming into ltraj object, we can get two things at once: (1) x and y columns as coordinates of the track and (b) several movement metrics can be useful for segmentation, clustering and classification of the segments.
 
+#### Cleaning tracking data for segmentation and clustering
 ```{r}
 # Determine if there are movement during equinox days
 # Select equinoxes
@@ -130,72 +131,63 @@ Sep_eq <- as.Date(paste0(start_year, '-09-21'))
 Mar_eq <- as.Date(paste0(end_year, '-03-21'))
 ```
 
-Optionally we can remove colony days if they cause low-variance segments 
-```{r}
-cdays <- colony_days%>%
-  dplyr::filter(geo_trip == .env$geo_trip)
+Optionally we can remove colony days if they cause low-variance segments that `segclust` function cannot handle.
+
+```{r, eval= FALSE, include= FALSE}
+# cdays <- colony_days%>%
+#   dplyr::filter(geo_trip == .env$geo_trip)
 ```
 
+First, we remove erroneus positions, where the distance among them is too large. Then, we remove possible pseudo-duplicates, low-variance segments, that can be caused by the modelling of positions along the equinox periods, the correction of the positions along colony days or another reason that cause > 4 consecutive positions with the same coordinates.
 
 ```{r}
 # Clean erroneus positions
-df_trip2 <- clean_positions(data = df_trip, dist_threshold = 40)
+track_df2 <- clean_positions(data = track_df, dist_threshold = 40)
 
-df_trip3 <- remove_duplicates(data = df_trip2, equinox_days = 20, 
+track_df3 <- remove_duplicates(data = track_df2, equinox_days = 20, 
                               # cdays = cdays,
-                              Sept_eq = Sept_eq, Mar_eq = Mar_eq, dup_threshold = 4)
-
-
-# Correct R2n values, according to the real distance to the colony
-df_trip3 <- df_trip3 %>%
-  mutate(R2n = (x - col.lon)^2 + (y - col.lat)^2)
-
+                              Sep_eq = Sep_eq, Mar_eq = Mar_eq, dup_threshold = 4)
 ```
 
+### 4.3. Segmentation and clustering
 
 ```{r}
-# Segmentation/clustering of the hole trip
-mode_segclust <- segclust(df_trip3,
+
+mode_segclust <- segclust(track_df3,
                           Kmax = 15,
                           lmin = 5,
                           ncluster = 5:10,
                           seg.var = c('x', 'y'),
-                          # seg.var = c('R2n','dist'),
                           order.var = 'x',
                           diag.var = c('dx', 'dy', 'R2n', 'x', 'y', 'dist'),
                           subsample = F)
 
 # Results of segmentation/clustering
+
 # Plots
 segclust_plot <- plot(mode_segclust) # variables distribution
 map_seg <- segmap(mode_segclust, pointsize = 3, 
-                  coord.names = c("x","y"), interactive = F
-) # map segmentation
-# segclust_plot
-# map_seg
-# Check likelihood of alternative number of segment possible. There should
-# be a clear break if the segmentation is good
-bic <- BIC(mode_segclust)
-bic_max <- bic %>% filter(BIC == max(BIC))
-BIC_plot<-plot_BIC(mode_segclust)
+                  coord.names = c("x","y"), interactive = F) 
 
-# Number of segments
-nseg <- bic_max$nseg
-# Number of clusters
-ncluster <- bic_max$ncluster
+bic_plot <- plot_BIC(mode_segclust)
+segclust_plot + (map_seg / bic_plot)
 
+```
+
+```{r}
 # 7. Re-classification of the segments ####
 
 # Segments' reclassification to infer biological meaning
 # segs <- segment(mode_segclust)
-segments1 <- segment_classification(mode_segclust = mode_segclust,
-                                    # projection = projection,
-                                    option.by = 'seg',
-                                    col.lon = col.lon,
-                                    col.lat = col.lat)
+segments1 <- segment_class(mode_segclust = mode_segclust,
+                           option.by = 'seg',
+                           add.metrics = add.metrics,
+                           col.lon = col.lon,
+                           col.lat = col.lat)
 # Equinox correction
-segments2 <- equinox_interference(df_seg = segments1$df_clust, track = df_trip3,
-                                  Sept_eq, Mar_eq)
+segments2 <- equinox_interference(df_seg = segments1$df_clust, 
+                                  track = track_df3,
+                                  Sep_eq, Mar_eq)
 
 
 segments3 <- segment_correction(df_seg = segments2)
@@ -209,10 +201,16 @@ segments3 <- segments3 %>%
       TRUE ~ 'Ok'
     )
   )
-segments3 <- cbind(ID = geo_trip, Sp = Sp, segments3)
+segments3 <- cbind(ID = geo_trip, Sp = sp, segments3)
+```
 
+
+```{r}
 seg.list2[i] <- list(segments3)
+```
 
+
+```{r}
 # Resulting data.frame
 df_trip4 <-segclust2d::augment(mode_segclust)
 
@@ -331,4 +329,3 @@ phen <- data.frame(Ring = Ring, Sp = Sp, Colony = col.name,
 phen <- phen %>%
   mutate(across(c(BA_dep, WA_arr, WA_dep, BA_arr), as.Date))
 ```
-
