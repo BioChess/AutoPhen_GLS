@@ -1,0 +1,133 @@
+---
+title: "GLS supervised calibration analyses"
+author: "Diego Vicente-Sastre"
+format: html
+editor: visual
+date-modified: today
+#bibliography: references.bib
+execute: 
+  echo: true
+  warning: false
+  message: false
+---
+
+## 1. Introduction: visual inspection of migration tracks
+
+## 2. Load packages and functions
+```{r}
+pacman::p_load('tidyverse', 'dplyr', 'lubridate', # data carpenter
+               'readr', # read data
+               'leaflet', 'shiny', 'DT' # interactive maps
+)
+```
+
+We load our own functions to create an interactive map to check de classification of the track positions.
+
+```{r}
+source('functions/03_FUNCTIONS_Supervised_reclassification.R')
+```
+
+## 3. Load tracking data and metadata
+
+```{r}
+
+tracks.ph <- read_csv('output/Phenology_tracks.csv')
+
+seg.all <- read_csv('output/Segmentation_results.csv')
+
+ids <- unique(tracks.ph$ID)
+```
+## 4. Reclassification of tracks
+
+As in previous scripts, we can use a loop to review all the tracks we want at once.
+
+For reclassification, we will use the function `supervisedClass`. This function allows us to reclassify the segments in two  approaches:
+
+- **By segment**: we can reclassify a whole segment, e.g., a breeding segment classified as wintering.
+
+- **By position**: we can reclassify concrete positions, e.g., in general, a segment is correctly classified but first or last positions need to be reclassified. It allows to get accuracy in the procedure.
+
+
+### 4.1. Load track data
+
+We load the track and the segments data. In addition, we fill in the case if there is any `NA`value in the migration phenology behaviour.
+```{r}
+i = 1
+
+seg_df <- seg.all %>%
+  filter(ID == ids[i])
+
+track <- tracks.ph %>%
+  filter(ID == ids[i])
+
+
+if(any(is.na(track$Breed2))){
+  track <- track %>%
+    tidyr::fill(Breed, .direction = "down")%>%
+    tidyr::fill(Breed2, .direction = "down")
+}
+```
+
+
+### 4.2. Reclassification by segment
+
+Although we can directly reclassify the segments by position, we recommend to do, first, great changes as could be reclassify several segments and then, refine the reclassification, modifying only concrete points. 
+```{r}
+utrack <- supervisedClass(seg_df = seg_df, 
+                          track_df = track,
+                          byseg = T, x11 = F)
+# Update Breed
+track2 <- track
+track2$Breed2 <- utrack$Breed2
+
+
+seg_df2 <- utrack %>%
+  dplyr::select(Breed2, State:Check)%>%
+  distinct()%>%
+  drop_na()
+
+seg_df3 <- seg_df %>%
+  add_column(Breed2 = seg_df2$Breed2)
+```
+
+After a reclassification, we need to update the resulting classification of the track.
+
+### 4.3. Reclassification by positions
+
+```{r}
+utrack2 <- supervisedClass(seg_df = seg_df3, 
+                           track_df = track2,
+                           byseg = F, x11 = F)
+
+# Update Breed
+track3<- track2
+track3$Breed2 <- utrack2$Breed2
+
+if(any(is.na(track3$Breed2))){
+  track3 <- track3 %>%
+    tidyr::fill(Breed, .direction = "down")%>%
+    tidyr::fill(Breed2, .direction = "down")
+}
+```
+We update again the resulting classification of the track and we ensure that there is not `NA`values.
+
+## 5. Saving results
+Finally, as we are working in a loop, we can store the data in list and save it all together
+
+```{r, eval=FALSE}
+# Store data reclassified
+segs.list[[i]] <- list(seg_df3)
+seg_all3 <- plyr::ldply(segs.list, data.frame)
+
+track_all2 <- plyr::ldply(track.list, data.frame)
+track.list[[i]] <- list(track3)
+```
+
+And we save in a new .csv file.
+
+```{r, eval=FALSE}
+write_csv(track_all2, file = 'output/Phenology_tracks_corrected.csv')
+
+write.csv(seg_all2, file = 'output/Segmentation_results_corrected.csv')
+```
+

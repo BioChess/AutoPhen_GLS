@@ -153,20 +153,6 @@ trajmetrics <- function(trj){
   return(out)
 }
 ################################################################################
-calcmetrics <- function(trj_stt, begin, end) {
-  metrics <- Trajmetrics(trj_stt)
-  metrics$R2n_mean <- mean(trj_stt$R2n, na.rm = TRUE)
-  metrics$R2n_sd <- sd(trj_stt$R2n, na.rm = TRUE)
-  
-  metrics$state <- unique(trj_stt$state)
-  metrics$begin <- begin
-  metrics$end <- end
-  
-  metrics[,-c('state', 'begin', 'end')] <- round(metrics[,-c('state', 'begin', 'end')], digits = 3)
-  
-  return(metrics)
-}
-################################################################################
 
 ################################################################################
 # Determining optimun R2n limit
