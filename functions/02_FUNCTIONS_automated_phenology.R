@@ -556,7 +556,7 @@ my_theme <- theme_bw() +
 plot_segmentation <- function(segclust = NULL, map = NULL, 
                               segclass = NULL, col.lon = NULL, col.lat = NULL,
                               breed = T, data = df_trip4,
-                              world = world, option = 'all'){
+                              world = world){
   
  
   
@@ -567,6 +567,8 @@ plot_segmentation <- function(segclust = NULL, map = NULL,
       guides(color = FALSE, size = FALSE)+ #Remove legend
       guides(fill=guide_legend(title='State'))+ # New legend
       my_theme
+  } else {
+    segclust <- NULL
   }
   
   if(!is.null(map)){
@@ -576,6 +578,8 @@ plot_segmentation <- function(segclust = NULL, map = NULL,
       guides(color = FALSE, size = FALSE)+ #Remove legend
       my_theme
     
+  } else {
+    map <- NULL
   }
   
   if(!is.null(segclass)){
@@ -591,10 +595,13 @@ plot_segmentation <- function(segclust = NULL, map = NULL,
       labs(title = 'Trip periods classification')+
       xlab('Longitude') + ylab('Latitude')+
       my_theme
+  } else {
+    segclass_plot <- NULL
   }
   
   if(!is.null(breed)){
-    
+    require(rnaturalearth)
+    world <- ne_countries(scale = "large", returnclass = "sf")
     data <- data %>%
       mutate(
         Shape = case_when(Equinox == 'Sep' ~ 24,
@@ -654,15 +661,10 @@ plot_segmentation <- function(segclust = NULL, map = NULL,
       #Theme
       my_theme
     
+  } else {
+    breed_plot <- NULL
   }
-  
-  # # Grouping plots to save
-  # if(option == 'all') plot_save <- segclust_plot | (map_seg / segclass_plot) | Breed_plot
-  # # Save a unique plot
-  # if(option == 'segclust') plot_save <- segclust_plot 
-  # if(option == 'map') plot_save <- map_seg 
-  # if(option == 'segclass') plot_save <- segclass_plot 
-  # if(option == 'breed') plot_save <- Breed_plot 
+
   plot_list <- list(segclust = segclust_plot, map = map_seg, segclass = segclass_plot, breed = breed_plot)
   return(plot_list)
 }

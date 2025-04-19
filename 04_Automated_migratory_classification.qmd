@@ -163,6 +163,13 @@ mode_segclust <- segclust(track_df3,
                           subsample = F)
 
 # Results of segmentation/clustering
+bic <- BIC(mode_segclust)
+bic_max <- bic %>% filter(BIC == max(BIC))
+
+# Number of segments
+nseg <- bic_max$nseg
+# Number of clusters
+ncluster <- bic_max$ncluster
 
 # Plots
 segclust_plot <- plot(mode_segclust) # variables distribution
@@ -173,6 +180,16 @@ bic_plot <- plot_BIC(mode_segclust)
 segclust_plot + (map_seg / bic_plot)
 
 ```
+### 4.4. Segments classification
+
+The idea behind this part of the procedure is that there are three migratory behaviours: (1) breeding, (2) wintering and (3) migration. Breeding and wintering are stationary behaviours, meanwhile wintering and migration are non-breeding behaviours. Stationary segments can be defined by low straightness and mean angle vector, and high sinuosity values; in turn, non-breeding segments can be characterize by high NSCD values.
+
+Therefore, a double hierarchical clustering is performed by `segment_class` function. And this clustering is performed repeatedly per every possible combination of metrics we use. Each classification resulting is given a confidence value. The best classification of the segments is selected by the highest confidence value. 
+
+Following functions, `segment_class` and `segment_correction`, get two thing to refine the resulting classification:
+
+- **Indicate segments that match with equinox periods**. Additionally, these segments get reduced the confindence value.
+- **Correct miss-classifications**. The function check some especific cases where the algorithm can fail and it review the correct classification to give to each segment.
 
 ```{r}
 # 7. Re-classification of the segments ####
@@ -202,20 +219,33 @@ segments3 <- segments3 %>%
     )
   )
 segments3 <- cbind(ID = geo_trip, Sp = sp, segments3)
+
+# Summary of segmentation/clustering information
+seg_df <- data.frame(Ring = ring, Sp = sp, Colony = col.name,
+                     ID = geo_trip,
+                     n_seg = nseg, n_cluster = ncluster, 
+                     Breed_class = paste(segments3$Breed, collapse = '-'),
+                     n_seg_B = length(segments3$Breed[segments3$Breed == 'B']),
+                     n_seg_mig = length(segments3$Breed[segments3$Breed == 'mig']),
+                     n_seg_W = length(segments3$Breed[segments3$Breed == 'W']),
+                     Confidence_0 = mean(segments2$Confidence, na.rm = T)/3,
+                     Confidence = mean(segments3$Confidence, na.rm = T)/3,
+                     Metrics = paste(segments1$metrics, collapse = '-')
+                     
+)
 ```
 
 
-```{r}
-seg.list2[i] <- list(segments3)
-```
 
+### 4.5. Assignation migratory behaviour to each track position
+
+After the classification each segment in each respective behaviour, we assign this behaviour to each positions inside the segment. Also, we differenciate between post-nuptial migration (mig1) and pre-nuptial migration (mig2); and breeding pre-migration (B1) and post-migration (B2).
 
 ```{r}
 # Resulting data.frame
-df_trip4 <-segclust2d::augment(mode_segclust)
+track_df4 <-segclust2d::augment(mode_segclust)
 
-df_trip5 <- df_trip4 %>%
-  # left_join(., df_trip4)%>%
+track_df5 <- track_df4 %>%
   # Join Breed to hole track
   mutate(
     Breed = pmap_chr(
@@ -230,12 +260,8 @@ df_trip5 <- df_trip4 %>%
       }
     )) %>%
   distinct() %>%
-  # arrange(date) %>%
   add_column(ID = geo_trip) %>%
   dplyr::select(ID, everything()) %>%
-  # tidyr::fill(Breed, .direction = "down")%>%
-  # tidyr::fill(state, .direction = "down")%>%
-  # tidyr::fill(state_ordered, .direction = "down")%>%
   mutate(Breed2 = case_when(
     Breed == 'mig' & cumsum(replace_na(Breed == 'W', FALSE)) > 0 & 
       rev(cumsum(rev(replace_na(Breed == "W", FALSE)))) == 0 ~ 'mig2',
@@ -243,89 +269,55 @@ df_trip5 <- df_trip4 %>%
     TRUE ~ Breed
   )) %>%
   mutate(Equinox = ifelse(
-    date >= (as.Date(Sept_eq) - days(20)) & 
-      date <= (as.Date(Sept_eq) + days(20)), 'Sep',
+    date >= (as.Date(Sep_eq) - days(20)) & 
+      date <= (as.Date(Sep_eq) + days(20)), 'Sep',
     ifelse(
       date >= (as.Date(Mar_eq) - days(20)) & 
         date <= (as.Date(Mar_eq) + days(20)), 'Mar', 'No'
     )
   ))
 
-tracks_list[i] <- list(df_trip5)
+```
 
+### 4.6. Plotting results
+
+We can plot the results of the procedure in different ways thanks to `plot_segmentation` function. 
+We can plot segmentation and clustering plot, segmentation and clustering map, phenology map and error index plot. This last plot plot the mean of the variables segmented of each segment, as coordinates and add error bars as the SD of these variables.
+
+```{r}
 plot_list <- plot_segmentation(segclust = segclust_plot, map = map_seg, 
                                segclass = segments3, 
-                               col.lon = colony$Longitude, col.lat = colony$Latitude,
-                               breed = T, data = df_trip5,
-                               world = world, option = 'all')
+                               col.lon = col.lon, col.lat = col.lat,
+                               breed = T, data = track_df5,
+                               world = world)
 
 
 # plot_save <- plot_list$segclust | (plot_list$map / plot_list$segclass) | plot_list$breed
 plot_save <- plot_list$map | plot_list$breed
+plot_save
 
-
-ggsave(plot = plot_save,
-       filename = paste0(wd,'/Plots/Phenology/', 
-                         geo_trip, '_', end_year,'_', Sp, '_', col.name, '_',
-                         'seg-clust.jpg'),
-       width = 42, height = 18, units = 'cm')
-
-cat('First plot saved \n')
-
-# Detect resident individuals
-if(all(segments3$Breed != 'W') | all(segments3$Breed != 'B') |
-   all(segments3$index_seg2[which(segments3$Breed == 'W')] < 20)){
-  Migrant <- 'Resident'
-  
-  phen <- data.frame(Ring = Ring, Sp = Sp, Colony = col.name,
-                     ID = geo_trip, Migrant = Migrant,  
-                     BA_dep = as.POSIXct(NA), WA_arr = as.POSIXct(NA),
-                     WA_dep = as.POSIXct(NA), BA_arr = as.POSIXct(NA)
-  )
-  phen <- phen %>%
-    mutate(across(c(BA_dep, WA_arr, WA_dep, BA_arr), as.Date))
-  
-  phen.list[i] <- list(phen)
-  
-  cat('Phenology from geo (', i, ')', geo_trip, 'cannot be calculated \n')
-  cat('Track classified as resident \n')
-} else { 
-  Migrant <- 'Migrant'
-  cat('Track classified as migrant \n')
-}
-
-# Summary of segmentation/clustering information
-seg_df <- data.frame(Ring = Ring, Sp = Sp, Colony = col.name,
-                     ID = geo_trip, Migrant = Migrant,
-                     n_seg = nseg, n_cluster = ncluster, 
-                     Breed_class = paste(segments3$Breed, collapse = '-'),
-                     n_seg_B = length(segments3$Breed[segments3$Breed == 'B']),
-                     n_seg_mig = length(segments3$Breed[segments3$Breed == 'mig']),
-                     n_seg_W = length(segments3$Breed[segments3$Breed == 'W']),
-                     Confidence_0 = mean(segments2$Confidence, na.rm = T)/3,
-                     Confidence = mean(segments3$Confidence, na.rm = T)/3,
-                     Metrics = paste(segments1$metrics, collapse = '-')
-                     
-)
-seg.list[i] <- list(seg_df)
-
-if(Migrant == 'Resident') next
-
-pBA_dep <- first(which(df_trip5$Breed == 'mig'))
-pWA_arr <- first(which(df_trip5$Breed == 'W'))
-pWA_dep <- last(which(df_trip5$Breed == 'W')) + 1
-pBA_arr <- last(which(df_trip5$Breed == 'mig')) + 1
-
-BA_dep <- as.Date(df_trip5$date[pBA_dep])
-WA_arr <- as.Date(df_trip5$date[pWA_arr])
-WA_dep <- as.Date(df_trip5$date[pWA_dep])
-BA_arr <- as.Date(df_trip5$date[pBA_arr])
-
-phen <- data.frame(Ring = Ring, Sp = Sp, Colony = col.name,
-                   ID = geo_trip, Migrant = Migrant,  
-                   BA_dep = BA_dep, WA_arr = WA_arr,
-                   WA_dep = WA_dep, BA_arr = BA_arr
-)
-phen <- phen %>%
-  mutate(across(c(BA_dep, WA_arr, WA_dep, BA_arr), as.Date))
 ```
+
+
+When we are working in loops we can save the results of segmentation and migration behaviour classification in a list
+
+```{r, eval=FALSE, include=TRUE}
+# Segments
+seg.list[i] <- list(segments3)
+
+# Summary of segmentation/clustering 
+seg.list2[i] <- list(seg_df)
+
+# Track with phenology classification
+tracks_list[i] <- list(df_trip5)
+```
+
+## 5. Saving results
+```{r, eval= FALSE, include = TRUE}
+write.csv(seg_all, file = 'Segmentation_results.csv')
+
+write.csv(seg_all2, file = 'Summary_segmentation.csv')
+
+write_csv(track_all, file = 'Phenology_tracks.csv')
+```
+
