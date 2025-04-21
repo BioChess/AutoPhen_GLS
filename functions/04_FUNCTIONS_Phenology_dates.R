@@ -2,33 +2,33 @@
 
 check_phen <- function(data, column, min_length = 5) {
   # Apply run-length encoding (RLE) to the specified column
-  rle_breed <- rle(data[[column]])  
+  rle_ph <- rle(data[[column]])  
   
   # Initialize position in the original vector
-  pos_actual <- 1  
+  pos <- 1  
   
   # Iterate through each sequence in RLE
-  for (l in seq_along(rle_breed$lengths)) {
+  for (l in seq_along(rle_ph$lengths)) {
     # Skip the first and last sequences
-    if (l == 1 || l == length(rle_breed$lengths)) {
-      pos_actual <- pos_actual + rle_breed$lengths[l]
+    if (l == 1 || l == length(rle_ph$lengths)) {
+      pos <- pos + rle_ph$lengths[l]
       next
     }
     
     # Skip sequences longer than or equal to the minimum length
-    if (rle_breed$lengths[l] >= min_length) {
-      pos_actual <- pos_actual + rle_breed$lengths[l]
+    if (rle_ph$lengths[l] >= min_length) {
+      pos <- pos + rle_ph$lengths[l]
       next
     }
     
     # Check if the previous and next sequences have the same value
-    if (rle_breed$values[l - 1] == rle_breed$values[l + 1]) {
+    if (rle_ph$values[l - 1] == rle_ph$values[l + 1]) {
       # Replace the short sequence with the value of the surrounding sequences
-      data[[column]][pos_actual:(pos_actual + rle_breed$lengths[l] - 1)] <- rle_breed$values[l - 1]
+      data[[column]][pos:(pos + rle_ph$lengths[l] - 1)] <- rle_ph$values[l - 1]
     }
     
     # Update position in the vector
-    pos_actual <- pos_actual + rle_breed$lengths[l]
+    pos_actual <- pos_actual + rle_ph$lengths[l]
   }
   
   return(data)  # Return modified data
@@ -67,15 +67,15 @@ phen_periods <- function(breed_vector) {
 
 ################################################################################
 
-subset_phen_periods <- function(data, column) {
+subset_to_kde <- function(data, column) {
   # Apply run-length encoding (RLE) to the specified column
-  rle_breed <- rle(data[[column]])
+  rle_ph <- rle(data[[column]])
   
   # Create a data frame mapping indices to stages
   stages_df <- data.frame(
-    start = cumsum(c(1, head(rle_breed$lengths, -1))),  # Start indices
-    end = cumsum(rle_breed$lengths),  # End indices
-    stage = rle_breed$values
+    start = cumsum(c(1, head(rle_ph$lengths, -1))),  # Start indices
+    end = cumsum(rle_ph$lengths),  # End indices
+    stage = rle_ph$values
   )
   
   # Identify unique B/W stages
@@ -114,116 +114,7 @@ subset_phen_periods <- function(data, column) {
 
 ################################################################################
 
-# Function to initialize period-specific variables
-# Function to initialize period-specific variables for missing data
-initialize_missing_data <- function(k) {
-  period_type <- substr(k, 1, 1)
-  period_number <- substr(k, 2, nchar(k))
-  
-  if (period_type == "B") {
-    return(list(post = NULL, 
-                dep_point = data.frame(Longitude = NA, Latitude = NA), 
-                dep_date = NA, 
-                arr_point = NULL, arr_date = NA))
-  }
-  
-  if (period_type == "W") {
-    return(list(
-      post = NULL, 
-      arr_point = data.frame(Longitude = NA, Latitude = NA), 
-      arr_date = NA,
-      dep_point = data.frame(Longitude = NA, Latitude = NA), 
-      dep_date = NA
-    ))
-  }
-  
-  stop("Invalid period type!")
-}
-
-# Function to handle periods with no data
-handle_no_data <- function(k, results_list) {
-  period_type <- substr(k, 1, 1)
-  period_number <- substr(k, 2, nchar(k))
-  
-  results_list[[k]] <- initialize_variables(period_type, period_number)
-  return(results_list)
-}
-
-# Function to process periods with data
-process_data <- function(k, ph_seg, results_list) {
-  period_type <- substr(k, 1, 1)
-  period_number <- substr(k, 2, nchar(k))
-  
-  if (period_type == "B") {
-    if (k == "B1") {
-      results_list[[k]]$dep_point <- data.frame(
-        Longitude = ph_seg$Longitude[nrow(ph_seg)],
-        Latitude = ph_seg$Latitude[nrow(ph_seg)]
-      )
-    }
-    if (k == "B2") {
-      results_list[[k]]$arr_point <- data.frame(
-        Longitude = ph_seg$Longitude[1],
-        Latitude = ph_seg$Latitude[1]
-      )
-    }
-  }
-  
-  if (period_type == "W") {
-    results_list[[k]]$dep_point <- data.frame(
-      Longitude = ph_seg$Longitude[nrow(ph_seg)],
-      Latitude = ph_seg$Latitude[nrow(ph_seg)]
-    )
-    results_list[[k]]$arr_point <- data.frame(
-      Longitude = ph_seg$Longitude[1],
-      Latitude = ph_seg$Latitude[1]
-    )
-  }
-  
-  return(results_list)
-}
-
-# Function to process periods with fewer than 5 points
-process_few_points <- function(k, ph_seg) {
-  period_type <- substr(k, 1, 1)
-  
-  if (period_type == "B") {
-    if (k == "B1") {
-      return(list(
-        post = NULL,
-        arr_point = NULL, 
-        arr_date = NA,
-        dep_point = data.frame(Longitude = ph_seg$Longitude[nrow(ph_seg)], Latitude = ph_seg$Latitude[nrow(ph_seg)]),
-        dep_date = as.Date(ph_seg$DateTime[nrow(ph_seg)])
-      ))
-    }
-    if (k == "B2") {
-      return(list(
-        post = NULL,
-        arr_point = data.frame(Longitude = ph_seg$Longitude[1], Latitude = ph_seg$Latitude[1]),
-        arr_date = as.Date(ph_seg$DateTime[1]),
-        dep_point = NULL,
-        dep_date = NA
-      ))
-    }
-  }
-  
-  if (period_type == "W") {
-    return(list(
-      post = NULL,
-      arr_point = data.frame(Longitude = ph_seg$Longitude[1], Latitude = ph_seg$Latitude[1]),
-      arr_date = as.Date(ph_seg$DateTime[1],
-      dep_point = data.frame(Longitude = ph_seg$Longitude[nrow(ph_seg)], Latitude = ph_seg$Latitude[nrow(ph_seg)]),
-      dep_date = as.Date(ph_seg$DateTime[nrow(ph_seg)])
-      )
-    ))
-  }
-  
-  stop("Invalid period type!")
-}
-
-
-calculate_kde <- function(ph_seg, proj) {
+calculate_kde <- function(ph_seg, proj= 4326) {
   # Filter non-migratory points
   non_migratory <- ph_seg[!(ph_seg$Breed3 %in% c("mig1", "mig2")), ]
   
@@ -251,7 +142,7 @@ calculate_kde <- function(ph_seg, proj) {
 }
 
 # Function to find first and last points inside KDE
-find_dates <- function(ph_seg, KDE90_sf, proj = projections$WGS84) {
+find_dates <- function(ph_seg, KDE90_sf, proj = proj) {
   if (is.null(KDE90_sf)) {
     # If KDE is NULL, return NA for points and dates
     return(list(arr_point = data.frame(Longitude = NA, Latitude = NA), arr_date = NA,
@@ -307,25 +198,37 @@ find_dates <- function(ph_seg, KDE90_sf, proj = projections$WGS84) {
   return(list(arr_point = arr_point, arr_date = arr_date, dep_point = dep_point, dep_date = dep_date))
 }
 
-plot_phen_map <- function(df_sf, colony, results_list, world, my_theme) {
+################################################################################
+my_theme <- theme_bw() +
+  theme(panel.border = element_rect(color = "black", fill = NA),
+        plot.title = element_text(size = 20),
+        legend.title = element_text(size = 18,face = "bold"),
+        legend.text = element_text(size = 18),
+        axis.title.x = element_text(size = 16),
+        axis.text.x = element_text(size = 14),
+        axis.title.y = element_text(size = 16),
+        axis.text.y = element_text(size = 14)) 
+
+
+phen_map <- function(track, col.lat = NULL, col.lon = NULL, results_list, world) {
   # Ensure Longitude and Latitude are numeric, removing NAs
-  df_format <- df_format %>%
+  track <- track %>%
     mutate(Longitude = as.numeric(Longitude), Latitude = as.numeric(Latitude)) %>%
     filter(!is.na(Longitude) & !is.na(Latitude))
   
   # Debugging: Check if Longitude and Latitude are numeric
-  if (!is.numeric(df_format$Longitude) || !is.numeric(df_format$Latitude)) {
+  if (!is.numeric(track$Longitude) || !is.numeric(track$Latitude)) {
     stop("Error: Longitude and Latitude must be numeric.")
   }
   
   # Check if df_format is empty after removing NA values
-  if (nrow(df_format) == 0) {
+  if (nrow(track) == 0) {
     stop("Error: df_format contains no valid coordinates after removing NAs.")
   }
   
-  df_sf <- df_format%>%
+  df_sf <- track%>%
     st_as_sf(coords = c("Longitude", "Latitude"),
-             crs = projections$WGS84, agr = "constant", remove = FALSE)
+             crs = 4326, agr = "constant", remove = FALSE)
   # Define coordinate sets for mapping
   coordsets <- sf::st_bbox(df_sf)
   coordsets[c("xmin", "ymin")] <- coordsets[c("xmin", "ymin")] - 10
@@ -340,8 +243,8 @@ plot_phen_map <- function(df_sf, colony, results_list, world, my_theme) {
     geom_path(data = df_sf, aes(x = Longitude, y = Latitude), color = 'black') +
     
     # Add colony position
-    geom_point(data = colony, 
-               aes(x = Longitude, y = Latitude), 
+    geom_point( 
+               aes(x = col.lon, y = col.lat), 
                fill = 'orchid3', color = "black", 
                shape = 23, size = 5) +
     
@@ -413,52 +316,9 @@ plot_phen_map <- function(df_sf, colony, results_list, world, my_theme) {
   return(map_trip)
 }
 
-extract_phen_dates <- function(df) {
-  # Extract all unique phases from Breed3
-  phases <- unique(df$Breed3)
-  phase_positions <- list()
-  phase_dates <- list()  # List to store dates
-  
-  # Identify positions dynamically for each phase
-  for (phase in phases) {
-    if (phase == "mig1") {
-      # For "mig1", take the first occurrence (BA_dep)
-      phase_positions[["B1_dep"]] <- first(which(df$Breed3 == phase))
-      phase_dates[["B1_dep"]] <- as.Date(df$DateTime[phase_positions[["B1_dep"]]])
-    } else if (phase == "B2") {
-      # For "B2", take the first occurrence (BA_arr)
-      phase_positions[["B2_arr"]] <- first(which(df$Breed3 == phase))
-      phase_dates[["B2_arr"]] <- as.Date(df$DateTime[phase_positions[["B2_arr"]]])
-    } else if (grepl("^W\\d+$", phase)) {
-      # For "W" phases, calculate arrival and departure positions
-      arr_pos <- first(which(df$Breed3 == phase))
-      dep_pos <- last(which(df$Breed3 == phase)) + 1
-      phase_positions[[paste0(phase, "_arr")]] <- arr_pos
-      phase_positions[[paste0(phase, "_dep")]] <- dep_pos
-      phase_dates[[paste0(phase, "_arr")]] <- as.Date(df$DateTime[arr_pos])
-      phase_dates[[paste0(phase, "_dep")]] <- as.Date(df$DateTime[dep_pos])
-    }
-  }
-  
-  phase_dates_df <- as.data.frame(phase_dates)
-  
-  if(nrow(phase_dates_df) == 0) {
-    phase_dates_df <- data.frame(
-      B1_dep = as.Date(NA),
-      W1_arr = as.Date(NA),
-      W1_dep = as.Date(NA),
-      B2_arr = as.Date(NA)
-    )
-  } else if(!('B2_arr' %in% colnames(phase_dates_df))){
-    phase_dates_df$B2_arr <- as.Date(NA)
-  }
-  phase_dates_df <- phase_dates_df %>%
-    mutate(across(everything(), as.Date))
-  return(phase_dates_df)  # Return list of dates
-}
+################################################################################
 
-
-extract_phen_KDEdates <- function(results_list) {
+extract_phen_dates <- function(results_list) {
   # Initialize an empty list to store the extracted dates
   kde_dates <- list()
   
