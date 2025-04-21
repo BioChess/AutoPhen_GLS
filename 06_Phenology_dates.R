@@ -227,7 +227,7 @@ for (i in 1:length(ids)) {
   
   ####6. KDE phenology determination  #####
   
-  ph_seg.list <- subset_phen_periods(df_format, "Breed3")
+  ph_seg.list <- subset_to_kde(df_format, "Breed3")
   
   # Main processing loop
   results_list <- list()

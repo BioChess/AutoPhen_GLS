@@ -446,12 +446,6 @@ equinox_interference <- function(df_seg = segments1, track = df_trip2,
 
 ################################################################################
 
-
-# stght_th <- 0.5
-# angv_th <- 0.5
-# snsty_th <- 1
-
-
 segment_correction <- function(df_seg = segments2){
   
   median_sq_disp <- median(df_seg$sq_disp, na.rm = T)

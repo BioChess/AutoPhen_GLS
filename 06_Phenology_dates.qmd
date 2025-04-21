@@ -11,23 +11,309 @@ execute:
   message: false
 ---
 
-## Quarto
+## 1. Introduction: Kernel Density Estimation
 
-Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
-
-## Running Code
-
-When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+## 2. Load packages and functions
 
 ```{r}
-1 + 1
+
+pacman::p_load('tidyverse', 'dplyr', 'lubridate', 'readxl', 'readr', # data carpenter
+               'sf', # spatial data
+               'adehabitatHR', 'track2KBA', # migrate behaviour and kernels
+               'ggplot2', 'ggpubr', 'ggspatial',# plots
+               'patchwork', 'cowplot' # composing plots
+)
 ```
 
-You can add options to executable code like this
+We also load own functions designed to detect key phenological dates of migratory animal tracks
 
 ```{r}
-#| echo: false
-2 * 2
+source('functions/04_FUNCTIONS_Phenology_dates.R')
 ```
 
-The `echo: false` option disables the printing of code (only output is displayed).
+## 3. Load tracking data and metadata
+
+Besides metadata and tracks, we load the **wintering areas** shapefile. This file contains the different ecoregions of the Atlantic ocean where seabirds like shearwaters can winter. These ecoregions were defined by ...  and the shapefile is adapted by Virginia et al. (2025), where she included two ecoregions more (Equatorial Atlantic and South Atlantic). These ecoregions can be adapted for other species and in the context of other oceans and seas.
+
+```{r}
+#Metadata
+mdata3 <- read_csv('input/GLS.files3.csv', col_names = TRUE)
+
+# Tracking data
+tracks.ph <- read_csv('output/Phenology_tracks_corrected.csv')
+ids <-unique(tracks.ph$ID)
+
+# Wintering areas and ecoregions
+w.areas <- read_sf(dsn = "input/wintering_areas")
+ecoregions <- w.areas %>% dplyr::select(ECOREGION)
+
+world <- rnaturalearth::ne_countries(scale = "large", returnclass = "sf")
+sf_use_s2(FALSE)
+```
+
+
+## 4. Migration phenology estimation
+
+### 4.1. Load track data and metadata
+```{r}
+i = 1
+
+info<- mdata3 %>% filter(geo_trip == ids[i])
+
+geoID <- info$geo_alfanum
+geo_trip <- info$geo_trip
+ring<- info$Ring #Bird ID
+sp <- info$Sp
+
+cat('Processing geo ', geo_trip, '(', i, ') \n')
+
+track.ph <- tracks.ph %>% filter(ID == ids[i])
+
+start_year <- year(track.ph$date[1])
+end_year <- year(track.ph$date[nrow(track.ph)]) 
+
+
+# Colony info
+col.name <- info$Colony
+col.lat <- info$Colony.lat
+col.lon <- info$Colony.lon
+```
+
+### 4.2. Check and assing phenological periods
+
+In this step we count the number of periods of each phenological behaviour. Ideally, a migratory track will contain a pre-migration breeding period (B1), a post-nuptial migration period (mig1), a wintering period (W1), a pre-nuptial migration period (mig2) and a post-migratio breeding period (B2). However, in some cases, the track can contain more than one wintering period (e.g.,  the W1, W2, W3), and therefore, more than one migration period between wintering periods. These migration periods between wintering areas we still consider as post-nuptial migration periods (mig1).
+
+It is very important to get the results that this part of the procedure is going well. Sometimes there are little mistakes in th assignation of the phenological stage to some positions (many times as a consequence of the supervised re-classification). For example, if there are four positions assigned to "mig1" inside the "B1" period, we will get two breeding periods: "B1", "mig1", "B2" and then, the real "B2" period will be "B3".
+
+Because all of this, we check and correct this mistakes and then count the number of each phenological stages.
+
+
+```{r}
+# Correct possible mistakes
+
+track.ph2 <- check_phen(track.ph, "Breed2")
+
+track.ph2$Breed3 <- phen_periods(track.ph2$Breed2)
+
+# Identify unique B and W stages
+BW_periods <- unique(track.ph2$Breed3[grep("^B|^W", track.ph2$Breed3)])
+B_periods <- grep("^B", BW_periods, value = TRUE)
+W_periods <- grep("^W", BW_periods, value = TRUE)
+
+if(B_periods[1] == 'B1' & track.ph2$Breed2[1] != 'B'){
+  Bperiods <- 'B2'
+  track.ph2 <- track.ph2 %>%
+    mutate(Breed3 = case_when(Breed3 == 'B1' ~ 'B2',
+                              T ~ Breed3))
+}
+if(length(W_periods) == 0){
+  Wperiods <- NULL
+}
+
+BW_periods
+```
+
+### 4.3. Data format
+
+We are going to use `track2KBA` package to calculate the KDE. This package needs the data in a specific format. We will use the function `formatFields` to format the tracking data. 
+
+```{r}
+track_f <- formatFields(dataGroup = track.ph2, 
+                          fieldID   = "ID", 
+                          fieldDateTime = "date", 
+                          fieldLon  = "x", 
+                          fieldLat  = "y" )
+
+```
+
+Optionally, we can plot the track with the phenology classification of the points. We can save this plot, but it is useful to see the track classified before KDE calculation.
+
+```{r}
+####3. Phenology plot 1  #####
+breed_df <- track.ph2 %>%
+  mutate(
+    Shape = case_when(Equinox == 'Sep' ~ 24,
+                      Equinox == 'Mar' ~ 25,
+                      Equinox == 'No' ~ 21
+    ),
+    Color = case_when(Breed2 == 'B' ~ 'orange2',
+                      Breed2 == 'mig1' ~ 'grey40',
+                      Breed2 == 'mig2' ~ 'grey70',
+                      Breed2 == 'W' ~ 'steelblue',
+    ),
+    lab = case_when(Breed2 == 'B' ~ 'Breeding',
+                    Breed2 == 'mig1' ~ 'Migration post',
+                    Breed2 == 'mig2' ~ 'Migration pre',
+                    Breed2 == 'W' ~ 'Wintering',
+    )
+  )
+breaks <- unique(breed_df$Color)
+labels <- unique(breed_df$lab)
+
+# Breeding vs non-breeding plot
+breed_plot <- ggplot()+
+  # World
+  {if(!is.null(world))
+    geom_sf(data = world, fill=grey(0.9), color=grey(0.6), lwd = 0.2)
+  } +
+  
+  coord_sf(xlim = c(min(breed_df$x), max(breed_df$x)), 
+           ylim = c(min(breed_df$y), max(breed_df$y)), expand = TRUE) +
+  # Trip
+  geom_path(data= breed_df, aes(x, y))+
+  {if(length(unique(breed_df$Shape)) > 1)
+    geom_point(data= breed_df, aes(x, y, fill = Color,
+                                   shape = Shape), size = 3)
+  } +
+  {if(length(unique(breed_df$Shape)) == 1)
+    geom_point(data= breed_df, aes(x, y, fill = Color),
+               shape = 21, size = 3)
+  }+
+  # Colors
+  scale_fill_identity(guide = 'legend',
+                      name = 'Track classification',
+                      breaks = breaks,
+                      labels = labels
+  )+
+  # Shapes
+  scale_shape_identity(breaks = c(21, 25, 22),
+                       labels = c('No', 'March', 'September'),
+                       name = 'Equinox',
+                       guide = 'legend')+
+  # Labels
+  labs(title = 'Resultating segmentation')+
+  xlab('Longitude') + ylab('Latitude')+
+  # Correct legends colors
+  guides(fill = guide_legend(override.aes = list(fill = breaks,
+                                                 shape = 21)))+
+  #Theme
+  my_theme
+
+breed_plot
+```
+
+### 4.4. Assign wintering areas
+
+We project the track with the same projection that has the wintering areas shapefile. Per each wintering stage, we assign the ecoregion where more wintering points are located.
+
+```{r}
+
+# Track projected
+track_sf <- track_f%>%
+  st_as_sf(coords = c("Longitude", "Latitude"),
+           crs = 4326, agr = "constant", remove = FALSE)
+
+df_win <- st_join(track_sf, ecoregions, left = FALSE)
+
+WAs <- df_win %>%
+  filter(str_detect(Breed3, "^W\\d+$")) %>%  # Select wintering points
+  group_by(Breed3) %>% 
+  dplyr::summarise(
+    Ecoregion = names(which.max(table(ECOREGION)))  # Which is the most frequent ecoregion
+  ) %>%
+  right_join(
+    tibble(Breed3 = unique(df_win$Breed3[str_detect(df_win$Breed3, "^W\\d+$")])), 
+    by = "Breed3"
+  )
+
+if(nrow(WAs) == 0){
+  WAs <- ecoregions %>%
+    filter(ECOREGION == 'Saharan_Upwelling')%>%
+    add_column(Breed3 = 'W1')%>%
+    dplyr::select(Breed3, Ecoregion = ECOREGION)
+  
+}
+```
+
+### 4.5. Detect resident individuals
+
+Some species are partially migrant. What this means is, although the majority of the individuals migrate, part of them stay in areas close to their breeding area.
+```{r}
+if(all(track_f$Breed3 == 'B1')){
+  Migrant <- 'Resident'
+} else { 
+  Migrant <- 'Migrant'
+}
+```
+
+### 4.6. KDE phenology determination 
+
+Before do the loop, we separate into a list each stationary stage of the track (breeding and wintering periods) using the function `phen_periods`. These periods include the stationary stage (B or W) joined to the previous and following migratory periods. What that means, to determine the wintering area we calculate the 90% KDE of mig1 + W1 + mig2, whereas for the pre-migration breeding area, we join B1 + mig1.
+
+The function `calculate_kde` joins the process of the package `track2KBA`, utilizing "href" as smoothing factor and 90 as levelUD. Then, the funtion `find_dates` calculates the **first point inside as the arrival** point and **the first point outside the KDE as the departure** point. Knowing the points, the own function determines the dates of those points.
+
+```{r}
+
+ph_seg.list <- subset_to_kde(track_f, "Breed3")
+
+# Loop for each stationary stage (breeding and wintering areas)
+results_list <- list()
+for (k in names(ph_seg.list)) {
+  # k = 'B1'
+  print(k)
+  ph_seg <- ph_seg.list[[k]]
+  
+  rle_ph3 <- rle(df_format[['Breed3']])
+  
+  stg <- ph_seg[!(ph_seg$Breed3 %in% c("mig1", "mig2")), ]
+  
+  if (is.null(ph_seg) || nrow(stg) == 0) {
+    # If no data, NA values
+    results_list[[k]] <- list(KDE90_sf = NULL,
+                              arr_point = data.frame(Longitude = NA, Latitude = NA), 
+                              arr_date = NA,
+                              dep_point = data.frame(Longitude = NA, Latitude = NA), 
+                              dep_date = NA
+    )
+    next
+  }
+  
+  # Calculate KDE for non-migratory periods
+  KDE90_sf <- calculate_kde(ph_seg, proj = 4326)
+  
+  # Find first and last points inside KDE
+  phen_dates <- find_dates(ph_seg, KDE90_sf, proj = 4326)
+  
+  # Store results
+  results_list[[k]] <- c(list(KDE90_sf = KDE90_sf), phen_dates)
+}
+```
+
+When we work with partial migratory species, the following lines are recommended to be sure that 
+```{r}
+if(Migrant == 'Resident'){
+  results_list[["B1"]][["dep_date"]] <- as.Date(NA)
+}
+```
+
+### 4.7. Plot phenology
+The map summarize the results of the phenological dates extraction.
+```{r}
+map_ph <-  phen_map(track = track_f, col.lat = col.lat, col.lon = col.lon, results_list, world)
+
+map_ph
+```
+
+### 4.8. Saving phenological dates
+We store the data in a data frame that can be 
+```{r}
+phen_KDEdates <- extract_phen_dates(results_list)
+
+phen <- data.frame(Ring = ring, Sp = sp, Colony = col.name,
+                   ID = geo_trip, Migrant = Migrant, 
+                   Year1 = start_year, Year2 = end_year,
+                   phen_KDEdates
+)
+```
+
+When we are working in loops we can save the results of phenology extraction in a list
+
+```{r, eval=FALSE, include=TRUE}
+phen.list[i] <-list(phen.df)
+phen.all <- plyr::ldply(phen.list, data.frame)
+```
+
+```{r}
+write_csv(phen.all, file = 'output/Phenology.csv')
+```
+
