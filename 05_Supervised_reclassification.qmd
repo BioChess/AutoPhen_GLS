@@ -18,6 +18,7 @@ execute:
 ```{r}
 pacman::p_load('tidyverse', 'dplyr', 'lubridate', # data carpenter
                'readr', # read data
+               'ggplot2', 'ggpubr', # plots
                'leaflet', 'shiny', 'DT' # interactive maps
 )
 ```
