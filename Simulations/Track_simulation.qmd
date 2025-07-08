@@ -1,0 +1,297 @@
+---
+title: "Track_simulation"
+author: "Sergi Pujol-Rigol"
+format: html
+editor: visual
+date-modified: today
+---
+
+```{r}
+#| label: setup
+#| include: false
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Simulation of migratory tracks with the R package `marcher`
+
+```{r}
+#| warning: false
+#| message: false
+require(marcher)
+vignette("marcher")
+```
+
+Creation of two empty dataframe for the storage of the simulated tracks and the parameters extracted from each simulation, respectively.
+
+```{r}
+tracks <- data.frame()
+simulations <- data.frame()
+```
+
+Loop to generate 900 random simulations.
+
+```{r}
+#| fig.show: 'hide'
+for(i in 1:900){
+  set.seed(i)
+  
+  # Centroid 1 corresponding to Breeding Area (BA) and defined in origin coord.
+  x1 <- 0 
+  y1 <- 0
+  
+  # Division of the simulations into three groups of different migratory 
+      # distances (short, medium, long) and randomization of this distance
+      # for each simulation within the established range.
+      # In this case:
+          # Short: 25-50
+          # Medium: 70-95
+          # Long: 115-140
+  if(i <= 300){
+    D <- sample(25:50, size = 1)
+    distance <- "short"
+  } else {
+    if(i <= 600){
+      D <- sample(70:95, size = 1)
+      distance <- "medium"
+    } else { 
+      D <- sample(115:140, size = 1)
+      distance <- "long"
+    }
+  }
+  
+  # Randomization of angle vector between centroid 1 (BA) and 2 (Wintering Area).
+  angle_12 <- runif(1, min = 0, max = 2*pi)
+  
+  # Calculation of centroid 2 coord with the previous defined distance and angle.
+  x2 <- x1 + D * cos(angle_12)
+  y2 <- y1 + D * sin(angle_12)
+  
+  # Calculation of centroids 3 and 4 through the random selection of:
+      #Distances between coords 2-3 and 1-4, taken from a partition of
+          #the distance between 1-2 (D).
+      #Angle of the vector between coords 2-3 and 1-4, forced to be 
+          #between pi/3 and pi/5 times more or less than the 1-2 vector angle.
+  # Centroids 3 and 4 are only points of attraction to shape the migratory track.
+  partition1 <- sample(2:4, size = 1)
+  d1_WA <- D/partition1
+  
+  ang_seg12 <- atan2(y1-y2, x1-x2)
+  angle_23 <- sample(c(runif(1, min = ang_seg12 - pi/3, max = ang_seg12 - pi/5),
+                       runif(1, min = ang_seg12 + pi/5, max = ang_seg12 + pi/3)),
+                     size = 1)
+  
+  x3 <- x2 + d1_WA * cos(angle_23)
+  y3 <- y2 + d1_WA * sin(angle_23)
+  
+  partition2 <- sample(2:4, size = 1)
+  d1_BA <- D/partition2
+  
+  ang_seg21 <- atan2(y2-y1, x2-x1)
+  angle_14 <- sample(c(runif(1, min = ang_seg21 - pi/3, max = ang_seg21 - pi/5),
+                       runif(1, min = ang_seg21 + pi/5, max = ang_seg21 + pi/3)), 
+                     size = 1)
+  
+  x4 <- x1 + d1_BA * cos(angle_14)
+  y4 <- y1 + d1_BA * sin(angle_14)
+  # If centroids 3 and 4 are on the same side of the vector 1-2, the track has
+      # an 8-shape. If they are on different sides, the track has a round shape.
+  
+  # Calculation of distances between centroids 1-3 and 2-4.
+  d2_BA <- sqrt((x3-x1)^2 + (y3-y1)^2)
+  d2_WA <- sqrt((x4-x2)^2 + (y4-y2)^2)
+  
+  # Random selection of error parameters A, tau.z and tau.v within a determined
+      # range based on real tracks visualization.
+          # A: circular area within which observations are expected to occur with
+              # 95% probability.
+          # tau.z: autocorrelation time scale of crossing the home range.
+          # tau.v: autocorrelation time scale of velocity.
+  A <- 100:150 
+  tau.z <- sample(5:7, size = 1)
+  tau.v <- c(0.04, 0.05, 0.06)
+  j <- sample(1:3, size = 1)
+  
+  # Division of each distance group into two subgroups, one in which the 
+      # chronology of centroids is 1 -> 3 -> 2 -> 4 -> 1 and the other one in 
+      # which the chronology is 1 -> 4 -> 2 -> 3 -> 1 (change of the order in 
+      # the R vectors x3x4 and y3y4).
+  # Calculation of the number of points between centroids by dividing the 
+      # distance of each vector by a factor ranging from 1 to 2.5, depending on 
+      # the distance group (Short: 1 or 2, Medium: 1.5 or 2, Long: 2 or 2.5).
+  # The number of points is equivalent to the number of measures by GLS in 
+      # real migrations (2 points per day).
+  if (i <= 150) {
+    x3x4 <- c(x3, x4)
+    y3y4 <- c(y3, y4)
+    
+    dt1 <- round(d2_BA/runif(1, min = 1, max = 2), 0)
+    dt2 <- round(d1_WA/runif(1, min = 1, max = 2), 0)
+    
+    dt3 <- round(d2_WA/runif(1, min = 1, max = 2), 0)
+    dt4 <- round(d1_BA/runif(1, min = 1, max = 2), 0)
+    
+  } else {
+    if (i > 150 && i <= 300) {
+      x3x4 <- c(x4, x3)
+      y3y4 <- c(y4, y3)
+    
+      dt1 <- round(d1_BA/runif(1, min = 1, max = 2), 0)
+      dt2 <- round(d2_WA/runif(1, min = 1, max = 2), 0)
+      
+      dt3 <- round(d1_WA/runif(1, min = 1, max = 2), 0)
+      dt4 <- round(d2_BA/runif(1, min = 1, max = 2), 0)
+    } else {
+      if (i > 300 && i <= 450){
+        x3x4 <- c(x3, x4)
+        y3y4 <- c(y3, y4)
+        
+        dt1 <- round(d2_BA/runif(1, min = 1.5, max = 2), 0)
+        dt2 <- round(d1_WA/runif(1, min = 1.5, max = 2), 0)
+        
+        dt3 <- round(d2_WA/runif(1, min = 1.5, max = 2), 0)
+        dt4 <- round(d1_BA/runif(1, min = 1.5, max = 2), 0)
+      } else {
+        if (i > 450 && i <= 600){
+          x3x4 <- c(x4, x3)
+          y3y4 <- c(y4, y3)
+          
+          dt1 <- round(d1_BA/runif(1, min = 1.5, max = 2), 0)
+          dt2 <- round(d2_WA/runif(1, min = 1.5, max = 2), 0)
+          
+          dt3 <- round(d1_WA/runif(1, min = 1.5, max = 2), 0)
+          dt4 <- round(d2_BA/runif(1, min = 1.5, max = 2), 0)
+        } else {
+          if (i > 600 && i <= 750) {
+            x3x4 <- c(x3, x4)
+            y3y4 <- c(y3, y4)
+            
+            dt1 <- round(d2_BA/runif(1, min = 2, max = 2.5), 0)
+            dt2 <- round(d1_WA/runif(1, min = 2, max = 2.5), 0)
+            
+            dt3 <- round(d2_WA/runif(1, min = 2, max = 2.5), 0)
+            dt4 <- round(d1_BA/runif(1, min = 2, max = 2.5), 0)
+          } else {
+            x3x4 <- c(x4, x3)
+            y3y4 <- c(y4, y3)
+            
+            dt1 <- round(d1_BA/runif(1, min = 2, max = 2.5), 0)
+            dt2 <- round(d2_WA/runif(1, min = 2, max = 2.5), 0)
+            
+            dt3 <- round(d1_WA/runif(1, min = 2, max = 2.5), 0)
+            dt4 <- round(d2_BA/runif(1, min = 2, max = 2.5), 0)
+          }
+        }
+      }
+    }
+  }
+  
+  # Already calculated: Coordinates of centroids 1 to 4, number of points between 
+      # centroids depending on the chronological trajectory and error parameters.
+  
+  # Calculation of points per unit of distance for informational purposes.
+  if ((i <= 150) || (i >= 301 && i <= 450) || (i >= 601 && i <= 750)) {
+    sp1 <- d2_BA/dt1
+    sp2 <- d1_WA/dt2
+    sp3 <- d2_WA/dt3
+    sp4 <- d1_BA/dt4
+  } else {
+    sp1 <- d1_BA/dt1
+    sp2 <- d2_WA/dt2
+    sp3 <- d1_WA/dt3
+    sp4 <- d2_BA/dt4
+  }
+  
+  # Random selection within a range of the number of points in centroid 1 before
+      # starting the simulated migration (BA_time1). This range is extracted 
+      # from real tracks.
+  BA_time1 <- 120:180
+  BA_time1 <- sample(BA_time1, 1)
+  
+  # Package marcher only allows the simulation of a track with 3 centroids. For
+      # this reason, the simulation is divided in two parts (centroid 1 to
+      # centroid 2 and centroid 2 to centroid 1). Both centroids' number of 
+      # points is the sum of the points of both parts of the simulation.
+  
+  # Random selection within a range of the number of points in centroid 2 
+      #(WA_time1) in the first part of the simulation and calculation of the 
+      #total points in this part (total_time1).
+  WA_time1 <- 30:90
+  total_time1 <- BA_time1+dt1+dt2+sample(WA_time1, 1)
+  
+  # Simulation of the first part of the track (Trip BA -> WA) taking either 
+      # centroid 3 or centroid 4.
+  p.m <- c(x1 = x1, x2 = x3x4[1], x3 = x2,
+           y1 = y1, y2 = y3y4[1], y3 = y2,
+           t1 = BA_time1, t2 = BA_time1+dt1,
+           dt1 = dt1, dt2 = dt2)
+  A1 <- sample(A, 1); T <- 1:total_time1
+  Mu <- getMu_multi(T, p.m)
+  sim1 <- simulate_shift(T, tau=c(tau.z = tau.z, 
+                                  tau.v = tau.v[j]), mu=Mu, A=A1)
+  with(sim1, scan_track(time=T,x=X,y=Y))
+  
+  # Random selection within a range of the number of points in centroid 2 
+      # (WA_time2) in the second part of the simulation.
+  WA_time2 <- 30:90
+  WA_time2 <- sample(WA_time2, 1)
+  
+  # Random selection within a range of the number of points in centroid 1 after 
+      # finishing the simulated migration (BA_time2) and calculation of the total
+      # points in the second part of the simulation (total_time2).
+  BA_time2 <- 150:210
+  total_time2 <- WA_time2+dt3+dt4+sample(BA_time2, 1)
+  
+  # Simulation of the second part of the track (Trip WA -> BA) taking centroid 3
+      # or centroid 4 depending on the centroid taken in the first part.
+  p.m <- c(x1 = x2, x2 = x3x4[2], x3 = x1, 
+           y1 = y2, y2 = y3y4[2], y3 = y1, 
+           t1 = WA_time2, t2 = WA_time2+dt3, 
+           dt1 = dt3, dt2 = dt4)
+  A2 <- sample(A, 1); T <- 1:total_time2
+  Mu <- getMu_multi(T, p.m)
+  sim2 <- simulate_shift(T, tau=c(tau.z = tau.z, 
+                                  tau.v = tau.v[j]), mu=Mu, A=A2)
+  with(sim2, scan_track(time=T,x=X,y=Y))
+  
+  # Merger of the two parts of the simulation chronologically.
+  sim <- rbind(sim1, sim2)
+  sim$T <- 1:(total_time1 + total_time2)
+  with(sim, scan_track(time=T,x=X,y=Y))
+  
+  # All the simulated tracks are stored in the "tracks" dataframe.
+  sim$ID <- i
+  tracks <- rbind(tracks, sim)
+  
+  # Extraction of an informational dataframe with all the parameters.
+  phenology <- c(D, distance, round(angle_12,2), round(min(c(d1_BA, d2_BA)),2), 
+                 round(min(c(d1_WA, d2_WA)),2), tau.z, tau.v[j], mean(c(A1, A2)),
+                 round(min(c(sp1,sp2,sp3,sp4)),2), round(max(c(sp1,sp2,sp3,sp4)),2),
+                 BA_time1, BA_time1+dt1+dt2, total_time1+WA_time2, total_time1+WA_time2+dt3+dt4)
+  
+  # The parameters of all simulations are stored in the "simulations" dataframe.
+  simulations <- rbind(simulations, phenology)
+}
+```
+
+```{r}
+#| echo: false
+T <- 1:total_time1
+with(sim1, scan_track(time=T,x=X,y=Y))
+T <- 1:total_time2
+with(sim2, scan_track(time=T,x=X,y=Y))
+sim <- rbind(sim1, sim2)
+sim$T <- 1:(total_time1 + total_time2)
+with(sim, scan_track(time=T,x=X,y=Y))
+```
+
+Both dataframes are saved in csv after the generation of all 900 simulations.
+
+```{r}
+write.csv(tracks, file = paste0(Sys.Date(), paste0("simulations_positions.csv")), 
+             row.names = F)
+
+colnames(simulations) <- c("Main_seg_D", "Category", "Main_seg_ang", "d_BA", 
+                           "d_WA", "tau.z", "tau.v", "mean_A", "min_speed",
+                           "max_speed", "BA_dep", "WA_arr", "WA_dep", "BA_arr")
+write.csv(simulations, file = paste0(Sys.Date(), "simulations_data.csv"))
+```
