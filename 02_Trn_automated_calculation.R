@@ -245,7 +245,7 @@ for (i in seq_len(nrow(mdata))) {
   cat('  Trn from geo (', i, ')', geo_trip, 'saved\n')
 
   # Update metadata with output file name
-  mdata[i, c(21:23)] <- list(paste0('trn/', file.trn), 'Data', 'No')
+  mdata[i, c(23:25)] <- list(file.trn, 'Data', 'No')
 }
 
 

@@ -104,9 +104,9 @@ cat('Processing geo (', i,') ', geo_trip, 'since', start_year, 'to', end_year,
 
 Segmentation and clustering by segclust2d package requires:
 
--   **Trajectory class** object
+- **Trajectory class** object
 
--   **Avoid low variance** segments
+- **Avoid low variance** segments
 
 Additionally, if we are managing GLS data, we have to ensure **first position is at the colony**. In that way, we use Net Squared Colony Distance (NSCD) instead of Net Squared Distance (NSD).
 
@@ -190,8 +190,8 @@ Therefore, a double hierarchical clustering is performed by `segment_class` func
 
 Following functions, `segment_class` and `segment_correction`, get two thing to refine the resulting classification:
 
--   **Indicate segments that match with equinox periods**. Additionally, these segments get reduced the confindence value.
--   **Correct miss-classifications**. The function check some especific cases where the algorithm can fail and it review the correct classification to give to each segment.
+- **Indicate segments that match with equinox periods**. Additionally, these segments get reduced the confindence value.
+- **Correct miss-classifications**. The function check some especific cases where the algorithm can fail and it review the correct classification to give to each segment.
 
 ```{r}
 # 7. Re-classification of the segments ####
