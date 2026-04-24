@@ -341,15 +341,18 @@ calc_tol <- function(twl, zenith, n = 0.001, Sep_eq, Mar_eq, d,
 # @col_lat : latitude of the colony
 # @col_lon : longitude of the colony
 
-plot_SGAT <- function(x0, time, d, Sep_eq, Mar_eq, world, col_lat, col_lon) {
+plot_SGAT <- function(x0, time, d, Sep_eq, Mar_eq, col_lat, col_lon) {
 
   require(rnaturalearth)
+  # Ensure x0 has named columns for ggplot
+  colnames(x0) <- c("lon", "lat")
+
   require(ggplot2)
 
   xsep <- x0[which(as.Date(time) >= Sep_eq - d &
-                     as.Date(time) <= Sep_eq + d), ]
+                     as.Date(time) <= Sep_eq + d), , drop = FALSE]
   xmar <- x0[which(as.Date(time) >= Mar_eq - d &
-                     as.Date(time) <= Mar_eq + d), ]
+                     as.Date(time) <= Mar_eq + d), , drop = FALSE]
 
   world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
 
