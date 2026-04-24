@@ -23,341 +23,360 @@ The sunrise and sunset times captured by the GLS are associated with those of th
 
 Some packages require to be installed remotely from other repositories outside of CRAN. Following lines need to be run only the first time.
 
-```{r install_pkgs, include = TRUE, eval= FALSE}
-
+```{r install_pkgs, include=TRUE, eval=FALSE}
 # Both packages allow us to download packages from external repositories as GitHub
-install.packages("pacman")
-install.packages("devtools")
-library(devtools)
-install.packages("remotes")
-library(remotes)
+if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
-#Installing packages from GitHub
-install_github("SWotherspoon/SGAT")
-install_github("SWotherspoon/BAStag")
-install_github("bmcclintock/momentuHMM")
-install_github("SLisovski/TwGeos")
-install_github("SLisovski/GeoLight")
+pacman::p_load(devtools, remotes, install = TRUE)
 
+pacman::p_load_gh(
+  "SWotherspoon/SGAT",
+  "SWotherspoon/BAStag",
+  "bmcclintock/momentuHMM",
+  "SLisovski/TwGeos",
+  "SLisovski/GeoLight"
+)
 ```
 
-We load other required packages
+We load other required packages.
 
-```{r loading_func, include=TRUE}
-pacman::p_load('devtools','remotes', # installing external packages
-               'readxl', # opening Excels and csv
-               'tidyverse',  #managing data
-               'lubridate', # dealing with dates
-               'evaluate', # check errors
-               'maps', 'rworldmap', 'maptools', # creating map for Geolight
-               'GeoLight', 'BAStag', 'TwGeos' # geolocators
-               )
+```{r loading_func}
+pacman::p_load(
+  'devtools', 'remotes',        # installing external packages
+  'readxl',                     # opening Excels and csv
+  'tidyverse',                  # managing data
+  'lubridate',                  # dealing with dates
+  'evaluate',                   # check errors
+  'maps', 'rworldmap',          # creating maps for GeoLight
+  'GeoLight', 'BAStag', 'TwGeos' # geolocators
+)
 
-if ("purrr" %in% .packages()){
+# Detach purrr to avoid conflicts with base map()
+if ("purrr" %in% .packages()) {
   detach("package:purrr", unload = TRUE)
 }
-# to avoid problems with map function
-
 ```
 
 Lastly, we load own functions, specifically designed for working with GLS data.
 
 ```{r extra_func}
-source("functions/01_FUNCTIONS_GLS_analysis.R") # simplify working with GLS data
-
+source("functions/01_FUNCTIONS_GLS_analysis.R")
 ```
 
 ## 3. Read metadata and define thresholds
 
-```{r load_data, include=FALSE, echo=F, message=F, warning=F}
-mdata <- read_csv('input/GLS.files.csv', col_names = TRUE)
-head(mdata)
-info <- read_csv('input/GLS.info.csv', col_names = TRUE)
-head(info)
+```{r load_data}
+mdata      <- read_csv('input/GLS.files.csv',        col_names = TRUE)
+info_file  <- read_csv('input/GLS.info.csv',         col_names = TRUE)
 calib.info <- read_csv('input/Info.calibrations.csv')
-head(calib.info)
 ```
 
 **Metadata file** contains the files available for each GLS (i.e., light, wet-dry and SST data) and the format of each file, which depends on the producer.
 
-**Calibrations information file** contains the specific information for each calibration period of each GLS. Each GLS can be calibrated more than once and in different places. Here is added the coordinates of each calibration locality.
+**Calibrations information file** contains the specific information for each calibration period of each GLS. Each GLS can be calibrated more than once and in different places. Here are added the coordinates of each calibration locality.
 
-Following values are limiting the area for map the raw points inferred from light data along calibrations period. The map will be a helping tool, but not the main one.
+```{r set_params}
+# Light threshold: value above which it is daytime (typically 1.5-2)
+threshold <- 2
 
-```{r set_map, include=FALSE, echo=F, message=F, warning=F}
+# Map extent — used as visual aid during calibration
+xlim <- c(-20, 0)
+ylim <- c(15, 40)
+map  <- rworldmap::getMap(resolution = "coarse")
 
-threshold = 2 # defines since which value is night or daylight
-
-xlim <- c(-20, 0) #longitude limits of the map
-ylim <- c(15, 40) #latitude limits of the map
-map <- rworldmap::getMap(resolution = "coarse") # will help you to detect erroneous twilitght events
-
+# Method for thresholdCalibration: "SGD" or "IRLS"
+method <- "SGD"
 ```
 
-**Threshold** defines the light levels above which it is day and below it is night .Normally it is between 1.5 and 2.
-
-The **map** will be a helping tool, but not the main reference to take decisions.
-
-## 4. Loop to determine sun angles parameters
-
-We are usually going to work with multiple GLSs at the same time. Due to that, the best option is apply a **loop** to chain each calibration with the following one. In that way, we will save time, avoiding manually introduce each values.
+**Threshold** defines the light level above which it is day and below it is night. Normally it is between 1.5 and 2. The **map** will be a visual aid, but not the main reference for decisions. The **method** controls the fitting algorithm used inside `thresholdCalibration`.
 
 ## 4. Extraction of calibration parameters
 
+For each GLS, up to three calibration periods are processed:
+
+- **Steps 1–2**: pre-deployment calibrations (suffix `_PD1`, `_PD2`)
+- **Step 3**: post-recovery calibration (suffix `_PR3`)
+
+We extract the following parameters via `thresholdCalibration` from the `TwGeos` package:
+
+- **Zenith angles**: zero-deviation (`zenith0`) and median-deviation (`zenith`)
+- **Error distribution parameters**: shape (`alpha.mean`) and scale (`alpha.sd`)
+
 ### 4.1. Read GLS information
 
-We get all the **essential information** of the GLS.
+We get all the **essential information** for a single GLS (here `i = 1`). In a full analysis this block runs inside an outer loop over all rows of `mdata`.
 
 ```{r GLS_info}
+i <- 1
+gls.dir <- paste0(getwd(), '/input/GLS/')
 
-i=1
-gls.dir <-paste0(getwd(),'/input/GLS/')
-
-# Load .lux file and extract the GLS id from the name of the file
-
-info<-mdata[i,]
-lightfile <- if_else(!is.na(info$File.adjlux), info$File.adjlux, info$File.lux)
+info       <- mdata[i, ]
+lightfile  <- if_else(!is.na(info$File.adjlux), info$File.adjlux, info$File.lux)
 lightfile_c <- paste0(gls.dir, lightfile)
 
-# if (!file.exists(lightfile) | is.na(lightfile_c)) next
+geoID    <- info$geo_alfanum
+Producer <- info$Producer   # e.g. "Migrate Technology", "Biotrack"
+col.name <- info$Colony
+sp       <- info$Sp
+year_rec <- info$Year_rec
 
-geoID <- info$geo_alfanum # Which GLS is processing
+cat('Processing geo (', i, ')', geoID, 'for year', year_rec, '\n')
 
-LoggerModel <- info$Modelo # logger model
-Producer <- info$Producer # e.g "Migrate Technology","BAS","Biotrack","Lotek"
+# Calibration info for this GLS
+calib <- calib.info %>% filter(geo_alfanum == geoID)
 
-
-
-# Get info of the GLS and its calibration
-calib<-calib.info%>%filter(geo_alfanum == geoID)# calibration info
-
+if (nrow(calib) == 0) stop("No calibration info for geo ", geoID, " — check Info.calibrations.csv")
 ```
 
-Additionally, we can extract **other extra information** useful, for example for saving the files or if we are analyzing GLS from different colonies and species.
+We can also extract additional metadata useful for saving outputs or working across colonies and species.
 
 ```{r GLS_extra_info}
-
-# Additional information
-
-col.name <- info$Colony
-start_date<-as.Date(info$start_date, tz = 'GMT') #date start the trip
-end_date <-as.Date(info$end_date, tz = 'GMT') #date end the trip
-sp <- info$Sp # species
-year_rec <- info$Year_rec # recovery year
-
-cat('Processing geo (', i,') ', geoID, 'for year', year_rec, '\n')
-
+start_date <- as.Date(info$start_date, tz = 'GMT')
+end_date   <- as.Date(info$end_date,   tz = 'GMT')
 ```
 
 ### 4.2. Read light data
 
-With the information read, we can use the function to read raw light data from any model of GLS. We need to specify the company o produce (e.g., Migrate Technology, Biotrack...), the ID of the GLS, the file/path that contains the data. Furthermore, we can subset the starting and ending date of recording data (i.e., deployment and recovery dates) if we are interested in.
-
-In very few cases, some files from Migrate Technology cannot be read by *readMTlux* function. We can include them in *MTexcep* to read them correctly.
-
 ```{r read_light}
-lu <- read_lightGLS(producer = Producer, ID = geoID, 
-                    file = lightfile_c 
-                    # start_date 
-                    # end_date
-                    )
-
+lu <- read_lightGLS(
+  producer = Producer,
+  ID       = geoID,
+  file     = lightfile_c
+  # start_date = start_date  # uncomment to subset to deployment period
+  # end_date   = end_date
+)
 ```
 
 ### 4.3. Calibration parameters
 
-For each calibration period we are going to extract several parameters that we will need for further steps processing GLS data. We base the loop procedure in `thresholdCalibration` function from `TwGeos` package.
+For each of the (up to) three calibration periods we run the interactive `calib_period` function — which displays the light image and lets the user review twilight events — and then extract SGAT parameters via `thresholdCalibration`.
 
--   **Zenith angles**:
+> **⚠️ Interactive step — run chunk by chunk from RStudio, do not use *Render*.** `calib_period` opens a plot window that requires manual interaction (clicking to accept or correct twilight events). Make sure all previous chunks have been run first so that `lu`, `calib`, `geoID`, etc. are available in your environment.
 
-    -   Zero deviation zenith angle
-
-    -   Median deviation zenith angle
-
--   **Parameters of error distribution** (alpha parameters**:**
-
-    -   Shape
-
-    -   Scale
-
-```{r main_loop, eval= FALSE}
-twl_error.list <-list()
-for (step in 1:3) {
-  # step = 1
-  
-  # Define the calib_start and calib_end for the current step
-  
-  calib_start <- as.POSIXct(calib[[paste0("calib_start", step)]], tz = "GMT")
-  calib_end <- as.POSIXct(calib[[paste0("calib_end", step)]]+1, tz = "GMT")# add one day to take all the hole calibration period
-  n_days <- round(as.numeric(difftime(calib_end, calib_start, 
-                                      units = 'days')))
-  loc <- calib[[paste0("loc_calib", step)]]
-  lon <- calib[[paste0("Lon", step)]]
-  lat <- calib[[paste0("Lat", step)]]
-  
-  calib_SGAT <- NA
-  
-  if (!is.na(loc) && !is.na(calib_end)) {
-
-    # Perform calibration for the current step
-    twl <- calib_period(data = lu,
-                        start = calib_start, 
-                        end = calib_end, 
-                        lon = lon, lat = lat,
-                        threshold = threshold)
-       # Optionally: Save light file of the calibration period
-    trn <- twl %>%
-      mutate(date_time = Twilight,
-             type = ifelse(Rise == 'TRUE', 'Sunrise', 'Sunset'),
-             confidence = Marker) %>%
-      dplyr::select(date_time, type, confidence)
-    
-    if(step %in% c(1,2)) step <- 'predep'
-    if(step %in% c(3,4)) step <- 'postrec'
-  
-    file <- paste(geoID, sp, year_rec, colony, step, '.trn', sep = '_')
-    if(!dir.exists('output/calibrations')){
-      dir.create('output/calibrations', recursive = TRUE, showWarnings = FALSE)
-    }
-      
-    write.table(trn, file = paste0('output/calibrations/', file), 
-                sep = ',', col.names = FALSE, row.names = FALSE, quote = FALSE)
-    cat('Trn saved for calibration period', step, '\n')
-    
-    # Perform SGAT calibration
-    calib_SGAT <- try(thresholdCalibration(twl$Twilight, twl$Rise, lon, lat, method = method))
-    if (is.error(calib_SGAT)) {
-      print('Error SGAT calibration')
-      calib_SGAT <- c('NA', 'NA', 'NA', 'NA')
-    } 
-  } else {
-    message('No calibration information for step',step,'\n')
-    calib_SGAT <- c('NA', 'NA', 'NA', 'NA')
-  }
-  
-  if(step == 3){cat('Geo done')}
-  
-  twl_error <- bind_cols(geoID = geoID, Producer = Producer, Year = year_rec, Colony = col.name,
-                         n_days = n_days,
-                         zenith = calib_SGAT[1], 
-                         zenith0 = calib_SGAT[2], 
-                         alpha.mean = calib_SGAT[3], 
-                         alpha.sd = calib_SGAT[4],
-                         Loc = loc)
-  
-  colnames(twl_error)[5:10]<- paste0(colnames(twl_error[5:10]),'_PD', step)
-  
-  
-  twl_error.list[[step]] <-list(twl_error)
-}
-
-
-twl_error_GLS<- bind_rows(calib_SGAT.list)%>%
-    group_by(geoID, Producer, Year, Colony) %>% 
-    summarise_all(funs(na.omit(.)[1]))
-  
-  calib.list_SGAT[i]<-list(twl_error_GLS)
-  
-
-# Outside the loop joining SGAT calibration parameters
-  
-calib.all_SGAT <- bind_rows(calib.list_SGAT)
-
-str(calib.all_SGAT)# check the structure of our data
-calib.all_SGAT<-calib.all_SGAT%>%
-  mutate_at(c(3,5:8,10:13,15:18), as.numeric)
- 
+```{r calib_init}
+# Initialise accumulator lists before the interactive loop
+# <<- assigns to the global environment so results survive across chunk runs
+calib.list_SGAT <<- vector('list', nrow(mdata))
+twl_error.list  <<- list()
 ```
 
-```{r calib_results, include = FALSE}
+```{r main_loop}
+# ── Run this chunk interactively from RStudio (not via Render) ──────────────
+# calib_period() opens an interactive plot window. After reviewing each light
+# image, close the window to advance to the next calibration step.
 
-# df <- read_csv("users_guide/Manual_calibrations_SGAT.csv")
-# calib.all_SGAT <- df %>%
-#   filter(geo_alfanum %in% c('11001', '12001', '19001', '33001', '41001', '42002', '47001'))%>%
-#   dplyr::rename(Year = year)
-# write_csv(calib.all_SGAT, file = "users_guide/Manual_calibrations_SGAT.csv")
+for (step in 1:3) {
 
+  calib_start <- as.POSIXct(calib[[paste0("calib_start", step)]], tz = "GMT")
+  calib_end   <- as.POSIXct(calib[[paste0("calib_end",   step)]] + 1, tz = "GMT")
+  n_days <- round(as.numeric(difftime(calib_end, calib_start, units = 'days')))
+  loc    <- calib[[paste0("loc_calib", step)]]
+  lon    <- calib[[paste0("Lon", step)]]
+  lat    <- calib[[paste0("Lat", step)]]
+
+  # Column suffix consistent with downstream scripts: PD1, PD2, PR3
+  step_label <- if (step %in% c(1, 2)) paste0("PD", step) else "PR3"
+  step_name  <- if (step %in% c(1, 2)) "predep" else "postrec"
+
+  calib_SGAT <- c(NA_real_, NA_real_, NA_real_, NA_real_)
+
+  # length() == 0 when column has no value; is.na() == TRUE when value is NA
+  if (length(loc) > 0 && length(calib_end) > 0 &&
+      !is.na(loc)  && !is.na(calib_end)) {
+
+    # Open an external graphics window: the RStudio plot pane does not support
+    # mouse/keyboard event handling required by preprocessLight() inside calib_period()
+    if (.Platform$OS.type == "windows") {
+      windows()
+    } else if (Sys.info()[["sysname"]] == "Darwin") {
+      quartz()
+    } else {
+      x11()
+    }
+
+    # Interactive light image — review twilights, then close the window to continue
+    twl <- calib_period(
+      data      = lu,
+      start     = calib_start,
+      end       = calib_end,
+      lon       = lon,
+      lat       = lat,
+      threshold = threshold
+    )
+
+    # Close the external device and return focus to RStudio
+    if (dev.cur() > 1) dev.off()
+
+    if (!is.data.frame(twl) || nrow(twl) == 0) {
+      message('No valid twilights for step ', step)
+
+    } else {
+
+      # Save .trn file for this calibration period
+      trn <- twl %>%
+        mutate(
+          date_time  = Twilight,
+          type       = ifelse(Rise == TRUE, 'Sunrise', 'Sunset'),
+          confidence = Marker
+        ) %>%
+        dplyr::select(date_time, type, confidence)
+
+      if (!dir.exists('output/calibrations'))
+        dir.create('output/calibrations', recursive = TRUE, showWarnings = FALSE)
+
+      file_trn <- paste(geoID, sp, year_rec, col.name, step_name, '.trn', sep = '_')
+      write.table(trn,
+                  file      = paste0('output/calibrations/', file_trn),
+                  sep       = ',',
+                  col.names = FALSE,
+                  row.names = FALSE,
+                  quote     = FALSE)
+      cat('Trn saved for calibration period:', step_name, '\n')
+
+      # SGAT threshold calibration
+      calib_SGAT <- try(
+        thresholdCalibration(twl$Twilight, twl$Rise, lon, lat, method = method),
+        silent = TRUE
+      )
+      if (inherits(calib_SGAT, 'try-error')) {
+        message('Error in SGAT calibration at step ', step)
+        calib_SGAT <- c(NA_real_, NA_real_, NA_real_, NA_real_)
+      }
+    }
+
+  } else {
+    message('No calibration information for step ', step)
+  }
+
+  # Build one row for this calibration step
+  twl_error <- bind_cols(
+    geoID      = geoID,
+    Producer   = Producer,
+    Year       = year_rec,
+    Colony     = col.name,
+    n_days     = n_days,
+    zenith     = calib_SGAT[1],
+    zenith0    = calib_SGAT[2],
+    alpha.mean = calib_SGAT[3],
+    alpha.sd   = calib_SGAT[4],
+    Loc        = loc
+  )
+  colnames(twl_error)[5:10] <- paste0(colnames(twl_error)[5:10], '_', step_label)
+
+  twl_error.list[[step]] <<- twl_error
+}
+
+# Collapse the 3 steps into one row per GLS and store in global list
+twl_error_GLS <- bind_rows(twl_error.list) %>%
+  group_by(geoID, Producer, Year, Colony) %>%
+  summarise(across(everything(), ~ na.omit(.x)[1]), .groups = 'drop')
+
+calib.list_SGAT[[i]] <<- twl_error_GLS
+cat('Geo (', i, ')', geoID, 'done — move to next GLS by changing i and re-running from 4.1\n')
+```
+
+```{r join_calib, eval=FALSE}
+# ── Run this chunk only after all GLS have been processed ───────────────────
+calib.all_SGAT <- bind_rows(calib.list_SGAT)
+
+str(calib.all_SGAT)
+# Convert parameter columns to numeric (already numeric from loop, just enforce type)
+calib.all_SGAT <- calib.all_SGAT %>%
+  mutate(across(c(3, 5:8, 10:13, 15:18), as.numeric))
+
+# Save intermediate result before outlier removal
+write_csv(calib.all_SGAT, file = 'users_guide/Manual_calibrations_SGAT.csv')
+cat('Raw calibration results saved.
+')
+```
+
+The chunk below loads the results already saved from a previous interactive session, so the rest of the document can be rendered without re-running the interactive steps.
+
+```{r calib_results}
 calib.all_SGAT <- read_csv("users_guide/Manual_calibrations_SGAT.csv")
 head(calib.all_SGAT)
 ```
 
 ## 5. Checking outliers
 
-Sometimes we can get values extremely high or low of some of the calibration parameters in some of the calibration periods. To avoid issues, we will find the outliers and remove them to calculate mean values per GLS.
+Sometimes we can get extremely high or low values for some calibration parameters in some periods. We detect and remove them before calculating mean values per GLS.
 
-```{r check_out, echo=TRUE, include=TRUE}
-# Define variables and producers to check
-vars <- c("zenith_PD1", "zenith_PD2", "zenith_PR3", 
-          "zenith0_PD1", "zenith0_PD2", "zenith0_PR3", 
-          "alpha.mean_PD1", "alpha.mean_PD2", "alpha.mean_PR3", 
-          "alpha.sd_PD1", "alpha.sd_PD2", "alpha.sd_PR3")
+```{r check_out}
+vars <- c(
+  "zenith_PD1",     "zenith_PD2",     "zenith_PR3",
+  "zenith0_PD1",    "zenith0_PD2",    "zenith0_PR3",
+  "alpha.mean_PD1", "alpha.mean_PD2", "alpha.mean_PR3",
+  "alpha.sd_PD1",   "alpha.sd_PD2",   "alpha.sd_PR3"
+)
 
 prd <- c("Migrate Technology", "Biotrack")
 
 calib_list <- list()
 
-# Loop through producers and apply the outlier detection and replacement
 for (p in prd) {
-  cal.df <- calib.all_SGAT %>%
-    filter(Producer == p)
+  cal.df <- calib.all_SGAT %>% filter(Producer == p)
   cal.df <- calib_out(cal.df, vars)
   calib_list[[p]] <- cal.df
 }
 
-# Combine data from different producers
-calib.all <- bind_rows(calib_list)
-
-# Sort the data by geo_alfanum
-calib.all <- calib.all %>% arrange(geo_alfanum)
-# head(calib.all)
-
+calib.all <- bind_rows(calib_list) %>% arrange(geoID)
 ```
 
 ## 6. Mean values of calibration parameters
 
-Once we have removed the outliers we can calculate mean values.
+Once outliers are removed we calculate mean values per GLS. When all three periods are available we use the pre-deployment value (most reliable); otherwise we average the available periods.
 
 ```{r mean_calib}
-calib.all_SGAT2<- calib.all %>%
-  group_by(Year, Colony, Producer)%>%
-  mutate(mean_zenith = ifelse(is.na(zenith_PD1) | is.na(zenith_PD2) | is.na(zenith_PR3),
-                              mean(c(zenith_PD1, zenith_PD2, zenith_PR3), na.rm = TRUE),
-                              zenith_PD1))%>%
-  mutate(mean_zenith0 = ifelse(is.na(zenith0_PD1) | is.na(zenith0_PD2) | is.na(zenith0_PR3),
-                               mean(c(zenith0_PD1, zenith0_PD2, zenith0_PR3), na.rm = TRUE),
-                               zenith0_PD1))%>%
-  mutate(mean_alpha.mean = ifelse(is.na(alpha.mean_PD1) | is.na(alpha.mean_PD2) | is.na(alpha.mean_PR3),
-                                  mean(c(alpha.mean_PD1, alpha.mean_PD2, alpha.mean_PR3), na.rm = TRUE),
-                                  alpha.mean_PD1)) %>%
-  mutate(mean_alpha.sd = ifelse(is.na(alpha.sd_PD1) | is.na(alpha.sd_PD2) | is.na(alpha.sd_PR3),
-                                mean(c(alpha.sd_PD1, alpha.sd_PD2, alpha.sd_PR3), na.rm = TRUE),
-                                alpha.sd_PD1))%>%
-  filter(!duplicated(geo_alfanum))
+calib.all_SGAT2 <- calib.all %>%
+  group_by(Year, Colony, Producer) %>%
+  mutate(
+    mean_zenith = ifelse(
+      is.na(zenith_PD1) | is.na(zenith_PD2) | is.na(zenith_PR3),
+      mean(c(zenith_PD1, zenith_PD2, zenith_PR3), na.rm = TRUE),
+      zenith_PD1
+    ),
+    mean_zenith0 = ifelse(
+      is.na(zenith0_PD1) | is.na(zenith0_PD2) | is.na(zenith0_PR3),
+      mean(c(zenith0_PD1, zenith0_PD2, zenith0_PR3), na.rm = TRUE),
+      zenith0_PD1
+    ),
+    mean_alpha.mean = ifelse(
+      is.na(alpha.mean_PD1) | is.na(alpha.mean_PD2) | is.na(alpha.mean_PR3),
+      mean(c(alpha.mean_PD1, alpha.mean_PD2, alpha.mean_PR3), na.rm = TRUE),
+      alpha.mean_PD1
+    ),
+    mean_alpha.sd = ifelse(
+      is.na(alpha.sd_PD1) | is.na(alpha.sd_PD2) | is.na(alpha.sd_PR3),
+      mean(c(alpha.sd_PD1, alpha.sd_PD2, alpha.sd_PR3), na.rm = TRUE),
+      alpha.sd_PD1
+    )
+  ) %>%
+  filter(!duplicated(geoID))
 
-
-
-par(mfrow= c(3,2))
-boxplot(calib.all_SGAT2[,25:26])
-boxplot(calib.all_SGAT2[,27:28])
-hist(calib.all_SGAT2$mean_zenith)
-hist(calib.all_SGAT2$mean_zenith0)
-hist(calib.all_SGAT2$mean_alpha.mean)
-hist(calib.all_SGAT2$mean_alpha.sd)
+# Diagnostic plots
+par(mfrow = c(3, 2))
+boxplot(calib.all_SGAT2[, 25:26], main = "Zenith angles")
+boxplot(calib.all_SGAT2[, 27:28], main = "Alpha parameters")
+hist(calib.all_SGAT2$mean_zenith,     main = "Mean zenith",     xlab = "")
+hist(calib.all_SGAT2$mean_zenith0,    main = "Mean zenith0",    xlab = "")
+hist(calib.all_SGAT2$mean_alpha.mean, main = "Mean alpha.mean", xlab = "")
+hist(calib.all_SGAT2$mean_alpha.sd,   main = "Mean alpha.sd",   xlab = "")
 
 write_csv(calib.all_SGAT2, file = 'output/Supervised_calibrations_SGAT.csv')
 ```
 
-Finally, we can summarize the calibration parameters per colony, species and year. This step will be helpful to analyse GLS than has not been calibrated or the calibration period is invalid (e.g., along equinox periods, too short period or not annotated).
+Finally, we summarise calibration parameters per colony, species and year. This is useful for GLS that were not calibrated or have an invalid calibration period (e.g., recorded during equinox, too short, or not annotated).
 
-```{r}
+```{r calib_summary}
 calib_SGAT_summary <- calib.all_SGAT2 %>%
   group_by(Colony, Year, Producer) %>%
   dplyr::summarise(
-    n_geos = n_distinct(geo_alfanum),
-    mean_zenith = mean(mean_zenith, na.rm = TRUE),
-    mean_zenith0 = mean(mean_zenith0, na.rm = TRUE),
+    n_geos          = n_distinct(geoID),
+    mean_zenith     = mean(mean_zenith,     na.rm = TRUE),
+    mean_zenith0    = mean(mean_zenith0,    na.rm = TRUE),
     mean_alpha.mean = mean(mean_alpha.mean, na.rm = TRUE),
-    mean_alpha.sd = mean(mean_alpha.sd, na.rm = TRUE)
+    mean_alpha.sd   = mean(mean_alpha.sd,   na.rm = TRUE),
+    .groups = 'drop'
   ) %>%
   arrange(Year) %>%
   distinct()
