@@ -40,7 +40,7 @@ source('functions/01_FUNCTIONS_GLS_analysis.R')
 mdata2    <- read_csv('input/GLS.files2.csv',                    col_names = TRUE)
 calibs    <- read_csv('output/Supervised_calibrations_SGAT.csv', col_names = TRUE)
 calib.sum <- read_csv('output/Summary_SGAT_calibrations.csv',    col_names = TRUE)
-col.days  <- read_csv('input/colony_days.csv')
+col.days  <- read_csv('input/colony_dates.csv')
 
 
 # =============================================================================
@@ -62,7 +62,7 @@ for (i in seq_len(nrow(mdata2))) {
     next
   }
 
-  trnfile_c <- paste0('output/', trnfile)
+  trnfile_c <- paste0('output/trn/', trnfile)
 
   if (!file.exists(trnfile_c)) {
     message('Skipping geo (', i, '): trn file not found at ', trnfile_c)
@@ -127,7 +127,7 @@ for (i in seq_len(nrow(mdata2))) {
   tol_res <- tryCatch(
     calc_tol(twl, zenith = zenith, n = 0.001, d = 20,
              Sep_eq = Sep_eq, Mar_eq = Mar_eq,
-             k1 = 0.95, k2 = 0.5, plot = FALSE),
+             k1 = 0.95, k2 = 0.5, plot = T),
     error = function(e) {
       message('  tol calculation failed: ', e$message)
       NULL
@@ -135,7 +135,7 @@ for (i in seq_len(nrow(mdata2))) {
   )
 
   if (is.null(tol_res)) next
-
+  tol_res$plot
   # --- 3.4. SGAT initial path -----------------------------------------------
 
   if (!is.null(tol_res$tol_mar) && !is.na(tol_res$tol_mar)) {
