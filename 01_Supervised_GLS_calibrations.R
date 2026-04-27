@@ -12,6 +12,7 @@
 # 1. INSTALL PACKAGES (run only the first time) ----
 # =============================================================================
 
+
 if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
 pacman::p_load(devtools, remotes, install = TRUE)
@@ -66,7 +67,7 @@ xlim <- c(-20, 0)
 ylim <- c(15, 40)
 map  <- rworldmap::getMap(resolution = "coarse")
 
-# Method for thresholdCalibration ("SGD" or "IRLS")
+# Method for thresholdCalibration ("gamma" or "log-normal")
 method <- "gamma"
 
 
@@ -83,7 +84,7 @@ gls.dir        <- paste0(getwd(), '/input/GLS/')
 calib.list_SGAT <- list()  # stores one row per GLS
 
 for (i in seq_len(nrow(mdata))) {
-
+# i = 1
   # --- 4.1. Read GLS information -------------------------------------------
 
   info      <- mdata[i, ]
