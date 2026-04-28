@@ -140,12 +140,21 @@ Twilight events are detected with `twilightCalc` from `GeoLight`. Two custom SEA
 ```{r twilight_calc}
 twl <- try(
   twilightCalc(lu$dtime, lu$lux,
-               ask            = FALSE,
+               ask            = F,
                preSelection   = TRUE,
                LightThreshold = 2,
                maxLight       = li),
   silent = TRUE
 )
+# For most recent R versions!!
+twl <- TwGeos::findTwilights(
+  tagdata   = lu,
+  threshold = 2,        
+  include   = as.POSIXct(c(start_date, end_date), tz = "GMT"),
+  extend    = 0,
+  dark.min  = 15             # ignorar sombreados < 15 min
+)
+twl_gl <- export2GeoLight(twl)
 
 if (inherits(twl, 'try-error'))
   stop('Twilight calculation failed for geo ', geo_trip)
