@@ -76,11 +76,11 @@ prep_seg <- function(seg_df) {
 join_track_seg <- function(track, seg) {
   track %>%
     mutate(
-      State = as.integer(map_int(list(date = date), ~ {
+      State = as.integer(pmap_chr(list(date = date), ~ {
         idx <- which(seg$Start <= ..1 & seg$End >= ..1)
         if (length(idx) > 0) seg$State[idx[1]] else NA_character_
       })),
-      Seg = as.integer(map_int(list(date = date), ~ {
+      Seg = as.integer(pmap_chr(list(date = date), ~ {
         idx <- which(seg$Start <= ..1 & seg$End >= ..1)
         if (length(idx) > 0) seg$Seg[idx[1]] else NA_character_
       }))
@@ -215,7 +215,7 @@ server <- function(input, output, session) {
     tryCatch({
       rv$tracks_ph <- read_csv(input$tracks_path, show_col_types = FALSE)
       rv$seg_all   <- read_csv(input$segs_path,   show_col_types = FALSE)
-      rv$ids       <- unique(rv$tracks_ph$ID)
+      rv$ids       <- as.character(unique(rv$tracks_ph$ID))
       rv$status_msg <- paste0("✅ Datos cargados. ",
                                length(rv$ids), " individuos encontrados.")
     }, error = function(e) {
