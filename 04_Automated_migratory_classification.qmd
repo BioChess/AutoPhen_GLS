@@ -76,7 +76,7 @@ We will work again through a loop.
 ### 4.1. Read track information
 
 ```{r}
-i= 1
+i= 2
 
 info<- mdata3[i,]
 
