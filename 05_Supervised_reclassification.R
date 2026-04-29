@@ -76,11 +76,11 @@ prep_seg <- function(seg_df) {
 join_track_seg <- function(track, seg) {
   track %>%
     mutate(
-      State = as.integer(pmap_chr(list(date = date), ~ {
+      State = as.integer(map_int(list(date = date), ~ {
         idx <- which(seg$Start <= ..1 & seg$End >= ..1)
         if (length(idx) > 0) seg$State[idx[1]] else NA_character_
       })),
-      Seg = as.integer(pmap_chr(list(date = date), ~ {
+      Seg = as.integer(map_int(list(date = date), ~ {
         idx <- which(seg$Start <= ..1 & seg$End >= ..1)
         if (length(idx) > 0) seg$Seg[idx[1]] else NA_character_
       }))
