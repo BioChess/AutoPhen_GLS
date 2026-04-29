@@ -46,9 +46,9 @@ As in previous scripts, we can use a loop to review all the tracks we want at on
 
 For reclassification, we will use the function `supervisedClass`. This function allows us to reclassify the segments in two approaches:
 
--   **By segment**: we can reclassify a whole segment, e.g., a breeding segment classified as wintering.
+- **By segment**: we can reclassify a whole segment, e.g., a breeding segment classified as wintering.
 
--   **By position**: we can reclassify concrete positions, e.g., in general, a segment is correctly classified but first or last positions need to be reclassified. It allows to get accuracy in the procedure.
+- **By position**: we can reclassify concrete positions, e.g., in general, a segment is correctly classified but first or last positions need to be reclassified. It allows to get accuracy in the procedure.
 
 ### 4.1. Load track data
 
