@@ -124,24 +124,19 @@ for (i in seq_len(nrow(mdata))) {
 
   # --- 3.3. Calculate twilight events ----------------------------------------
 
-  twl <- try(
-    twilightCalc(lu$dtime, lu$lux,
-                 ask            = T,
-                 preSelection   = TRUE,
-                 LightThreshold = 2,
-                 maxLight       = li),
-    silent = TRUE
-  )
-
   # For most recent R versions!!
-  twl <- TwGeos::findTwilights(
+  twl <- try(
+    TwGeos::findTwilights(
     tagdata   = lu,
     threshold = 2,        
-    include   = as.POSIXct(c(start_date, end_date), tz = "GMT"),
+    include   = lu$dtime,
     extend    = 0,
     dark.min  = 15             # ignorar sombreados < 15 min
+  ), 
+  silent = TRUE
   )
-  twl_gl <- export2GeoLight(twl)
+  
+  twl_gl <- TwGeos::export2GeoLight(twl)
   
   if (inherits(twl, 'try-error')) {
     mdata[i, c(21:23)] <- list(NA, 'Data. Problem with twilight calculation', NA)
