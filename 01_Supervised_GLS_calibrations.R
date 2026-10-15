@@ -11,8 +11,6 @@
 # =============================================================================
 # 1. INSTALL PACKAGES (run only the first time) ----
 # =============================================================================
-
-
 if (!requireNamespace("pacman", quietly = TRUE)) install.packages("pacman")
 
 pacman::p_load(devtools, remotes, install = TRUE)
@@ -84,7 +82,7 @@ gls.dir        <- paste0(getwd(), '/input/GLS/')
 calib.list_SGAT <- list()  # stores one row per GLS
 
 for (i in seq_len(nrow(mdata))) {
-# i = 1
+# i = 3
   # --- 4.1. Read GLS information -------------------------------------------
 
   info      <- mdata[i, ]
