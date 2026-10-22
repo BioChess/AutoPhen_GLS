@@ -48,7 +48,7 @@ prep_track <- function(track_df) {
       y    = round(y, 2),
       date = as.Date(date)
     ) %>%
-    dplyr::select(x, y, date, Breed, Breed2, col1)
+    dplyr::select(x, y, date, any_of("Equinox"), Breed, Breed2, col1)
 }
 
 # Prepare seg_df with standard columns

@@ -250,18 +250,11 @@ track_df4 <-segclust2d::augment(mode_segclust)
 
 track_df5 <- track_df4 %>%
   # Join Breed to hole track
-  mutate(
-    Breed = pmap_chr(
-      list(date = date),
-      ~ {
-        idx <- which(segments3$f_day <= ..1 & segments3$l_day >= ..1)
-        if (length(idx) > 0) {
-          segments3$Breed[idx[1]]
-        } else {
-          NA_character_
-        }
-      }
-    )) %>%
+  # Each position takes the class of the segment it belongs to. Segments are
+  # defined by the position index (begin-end), so we use the row number
+  # instead of the dates (dates left positions on the last day of a segment
+  # without class).
+  mutate(Breed = segments3$Breed[findInterval(row_number(), segments3$begin)]) %>%
   distinct() %>%
   add_column(ID = geo_trip) %>%
   dplyr::select(ID, everything()) %>%
