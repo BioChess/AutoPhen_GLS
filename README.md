@@ -25,15 +25,7 @@ This code accompanies the manuscript:
 
 ## Status
 
-This repository is being updated during the revision of the manuscript (October–November 2026). Main ongoing changes:
-
-- Projected coordinates (km) before segmentation and trajectory metrics.
-- All parameters and thresholds gathered in one documented place.
-- Colony anchoring with wet-dry/light data made optional and documented.
-- Equinox windows computed from the track dates (not fixed to the Northern Hemisphere calendar).
-- Code to reproduce the simulation study and all tables and figures.
-
-A tagged release will be archived on Zenodo for the final version of the paper. The version used for the submitted manuscript is available at <https://doi.org/10.5281/zenodo.18088716>.
+This repository is currently being updated. The version used for the submitted manuscript is available at <https://doi.org/10.5281/zenodo.18088716>.
 
 ---
 
