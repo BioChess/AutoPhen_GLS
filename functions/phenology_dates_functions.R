@@ -1,37 +1,31 @@
 ################################################################################
 
 check_phen <- function(data, column, min_length = 5) {
-  # Apply run-length encoding (RLE) to the specified column
-  rle_ph <- rle(data[[column]])  
-  
-  # Initialize position in the original vector
-  pos <- 1  
-  
-  # Iterate through each sequence in RLE
-  for (l in seq_along(rle_ph$lengths)) {
-    # Skip the first and last sequences
-    if (l == 1 || l == length(rle_ph$lengths)) {
-      pos <- pos + rle_ph$lengths[l]
-      next
+  # Short sequences (fewer than 'min_length' positions) that are surrounded by
+  # the same class are given that class. For example, B-B-mig-B-B becomes
+  # B-B-B-B-B. The first and last sequences are never changed.
+  x <- data[[column]]
+  rle_ph <- rle(x)
+  n_seq  <- length(rle_ph$lengths)
+  ends   <- cumsum(rle_ph$lengths)
+  starts <- ends - rle_ph$lengths + 1
+
+  if (n_seq >= 3) {
+    for (l in 2:(n_seq - 1)) {
+      if (rle_ph$lengths[l] >= min_length) next
+
+      prev_val <- rle_ph$values[l - 1]
+      next_val <- rle_ph$values[l + 1]
+
+      # Missing classes (NA) are not used to fill other sequences
+      if (!is.na(prev_val) && !is.na(next_val) && prev_val == next_val) {
+        x[starts[l]:ends[l]] <- prev_val
+      }
     }
-    
-    # Skip sequences longer than or equal to the minimum length
-    if (rle_ph$lengths[l] >= min_length) {
-      pos <- pos + rle_ph$lengths[l]
-      next
-    }
-    
-    # Check if the previous and next sequences have the same value
-    if (rle_ph$values[l - 1] == rle_ph$values[l + 1]) {
-      # Replace the short sequence with the value of the surrounding sequences
-      data[[column]][pos:(pos + rle_ph$lengths[l] - 1)] <- rle_ph$values[l - 1]
-    }
-    
-    # Update position in the vector
-    pos_actual <- pos_actual + rle_ph$lengths[l]
   }
-  
-  return(data)  # Return modified data
+
+  data[[column]] <- x
+  return(data)
 }
 
 
