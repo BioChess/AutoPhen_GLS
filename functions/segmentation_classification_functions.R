@@ -40,6 +40,7 @@ clean_positions <- function (data = df_trip, dist_threshold = 40){
 
 remove_duplicates <- function(data, equinox_days = 20, 
                               Sep_eq = Sep_eq, Mar_eq = Mar_eq, dup_threshold = 4,
+                              edge_positions = 5, col.lon, col.lat,
                               cdays = NULL){
   
   if(!'y' %in% names(data)){
@@ -82,10 +83,10 @@ remove_duplicates <- function(data, equinox_days = 20,
     cat('Other duplicated latitudes has been removed \n')
   }
   
-  if(any(duplicated(tail(data$y, 5)))){
-    data <- data[1:(nrow(data) - 5),]
-  } else if (any(duplicated(head(data$y, 5)))){
-    data <- data[5:nrow(data),]
+  if(any(duplicated(tail(data$y, edge_positions)))){
+    data <- data[1:(nrow(data) - edge_positions),]
+  } else if (any(duplicated(head(data$y, edge_positions)))){
+    data <- data[edge_positions:nrow(data),]
   }
   
   if(nrow(data) == n){
@@ -157,7 +158,7 @@ trajmetrics <- function(trj){
 ################################################################################
 # Determining optimun R2n limit
 
-R2n_limit <- function(x = track, plot = F){
+R2n_limit <- function(x = track, plot = F, Kmax = 3, lmin = 5, ncluster = 3){
   if (!requireNamespace("segclust2d", quietly = TRUE)) {
     stop("The 'segclust2d' package is required but is not installed. 
          Please install it before proceeding.")
@@ -174,9 +175,9 @@ R2n_limit <- function(x = track, plot = F){
   out <- tryCatch({
     suppressWarnings({
       x_segclust <- segclust(x,
-                             Kmax = 3,
-                             lmin = 5,
-                             ncluster = 3,
+                             Kmax = Kmax,
+                             lmin = lmin,
+                             ncluster = ncluster,
                              seg.var = c('R2n'),
                              subsample = F)
       
@@ -214,7 +215,8 @@ combm <- function(v = add.metrics, minv, maxv) {
 
 run_clust <- function(var_comb, df_seg, 
                       method = "complete",
-                      num_clusters = 2, R2n = R2n) {
+                      num_clusters = 2, R2n = R2n,
+                      adv, lmin = 5) {
   
   if (!is.data.frame(df_seg)) stop("The 'df_seg' input must be a data frame.")
   if (!is.numeric(num_clusters) || num_clusters <= 0) stop("'num_clusters' must be a positive integer.")
@@ -253,14 +255,16 @@ run_clust <- function(var_comb, df_seg,
       B_nB = ifelse(Clust_BnB %in% Clust_BnB[which(R2n_mean == min(.$R2n_mean, na.rm = T))], 'B', 'Non-B'),
       Breed = case_when(
         S_M == 'Stationary' & B_nB == 'B' ~ 'B',
-        S_M == 'Stationary' & B_nB == 'Non-B' & (end - begin) <= 5 & straightness > 0.5 ~ 'mig',
+        S_M == 'Stationary' & B_nB == 'Non-B' & (end - begin) <= lmin &
+          straightness > adv$short_straightness ~ 'mig',
         S_M == 'Stationary' & B_nB == 'Non-B' ~ 'W',
         S_M == 'Mig' & B_nB == 'Non-B' ~ 'mig',
         S_M == 'Mig' & B_nB == 'B' ~ case_when(
-          (end - begin) <= 5 ~ 'B',
+          (end - begin) <= lmin ~ 'B',
           row_number() == 1 ~ 'B',
           row_number() == nrow(df_clust) & R2n_mean <= R2n ~ 'B',
-          row_number() != nrow(df_clust) & R2n_mean <= R2n & ang_vector < 0.75 ~ 'B',
+          row_number() != nrow(df_clust) & R2n_mean <= R2n &
+            ang_vector < adv$breeding_ang_vector ~ 'B',
           TRUE ~ 'mig'
         ),
         
@@ -269,10 +273,14 @@ run_clust <- function(var_comb, df_seg,
     ) %>%
     mutate(
       B_W = ifelse(Breed %in% c('B', 'W'),
-                   (straightness < 0.5) + (ang_vector < 0.5) + (sinuosity > 1),
+                   (straightness < adv$score_straightness) +
+                     (ang_vector < adv$score_ang_vector) +
+                     (sinuosity > adv$score_sinuosity),
                    0),
       mig = ifelse(Breed == 'mig',
-                   (straightness > 0.5) + (ang_vector > 0.5) + (sinuosity < 1),
+                   (straightness > adv$score_straightness) +
+                     (ang_vector > adv$score_ang_vector) +
+                     (sinuosity < adv$score_sinuosity),
                    0)
     ) %>%
     mutate(
@@ -282,7 +290,8 @@ run_clust <- function(var_comb, df_seg,
         # Zero confidence for impossible classifications
         Breed == 'B' & R2n_mean > R2n ~ 0,
         Breed == 'W' & R2n_mean < R2n ~ 0,
-        Breed == 'mig' & straightness < 0.2 & ang_vector < 0.9 ~ 0,
+        Breed == 'mig' & straightness < adv$impossible_straightness &
+          ang_vector < adv$impossible_ang_vector ~ 0,
         B_W == 3 | mig == 3 ~ 3,
         B_W == 2 | mig == 2 ~ 2,
         B_W == 1 | mig == 1 ~ 1,
@@ -307,7 +316,8 @@ run_clust <- function(var_comb, df_seg,
 segment_class <- function (mode_segclust =  mode_segclust,
                            option.by = 'seg',
                            add.metrics = NULL,
-                           col.lon = NULL, col.lat = NULL){
+                           col.lon = NULL, col.lat = NULL,
+                           adv, lmin = 5){
   
   required_packages <- c("trajr", "tidyverse", "segclust2d", "recipes", "furrr")
   invisible(lapply(required_packages, function(p) {
@@ -350,26 +360,12 @@ segment_class <- function (mode_segclust =  mode_segclust,
     segs2 <- segs %>%
       left_join(., trj_df, by = c('begin', 'end', 'state'))
     
-  } else if(option.by == 'cluster'){
-    for (i in unique(segs$state)){
-      # i= 1
-      trj_stt <- track_trj  %>%
-        filter(state == i)
-      
-      metrics <- Trajmetrics(trj_stt)
-      metrics$R2n_mean <- mean(trj_stt$R2n)
-      metrics$R2n_sd <- sd(trj_stt$R2n)
-      metrics$state <- unique(trj_stt$state)
-      metrics[,c(1:10)] <- round(metrics[,c(1:10)], digits = 3)
-      trj.list[i] <- list(metrics)
-    }
-    trj_df <- plyr::ldply(trj.list, data.frame)
-    segs2 <- segs %>%
-      left_join(., trj_df, by = 'state')
-    
+  } else {
+    stop("option.by must be 'seg'.")
   }
   
-  R2n <- R2n_limit(track, plot = F)
+  R2n <- R2n_limit(track, plot = F, Kmax = adv$nscd_Kmax, lmin = lmin,
+                   ncluster = adv$nscd_ncluster)
   if(max(R2n) <= median(segs2$R2n_mean)){
     R2n <- max(R2n)
   } else {
@@ -377,19 +373,19 @@ segment_class <- function (mode_segclust =  mode_segclust,
   }
 
   if(!is.null(add.metrics)){
-    comb_metrics <- combm(add.metrics, minv = 1, maxv =3)
+    comb_metrics <- combm(add.metrics, minv = 1, maxv = adv$max_extra_metrics)
     
     # Add the base variables to each combination
     comb_metrics2 <- lapply(comb_metrics, function(vars) {
       expanded_vars <- unlist(lapply(vars, function(v) {
-        if (v %in% names(pair.m)) pair.m[[v]] else v
+        if (v %in% names(adv$paired_metrics)) adv$paired_metrics[[v]] else v
       }))
       unique(c(expanded_vars, 
-               setdiff(c("straightness", "sinuosity", "ang_vector"), expanded_vars)))
+               setdiff(adv$core_metrics, expanded_vars)))
     })
   } else {
     comb_metrics2 <- list()
-    comb_metrics2[[1]] <- list("straightness", "sinuosity", "ang_vector")
+    comb_metrics2[[1]] <- as.list(adv$core_metrics)
   }
 
   
@@ -397,7 +393,8 @@ segment_class <- function (mode_segclust =  mode_segclust,
   if (!is.null(segs2)) {
     plan(multisession)  # or plan(multicore) if supported
     clustering_results <- future_map(comb_metrics2, function(var_combination) {
-      run_clust(var_combination, df_seg = segs2, method = "complete", num_clusters = 2, R2n = R2n)
+      run_clust(var_combination, df_seg = segs2, method = adv$clust_method,
+                num_clusters = adv$clust_k, R2n = R2n, adv = adv, lmin = lmin)
     },
     .options = furrr_options(seed = TRUE)
     )
@@ -422,10 +419,10 @@ segment_class <- function (mode_segclust =  mode_segclust,
 ################################################################################
 
 equinox_interference <- function(df_seg = segments1, track = df_trip2,
-                                 Sep_eq, Mar_eq){
-  # require(dplyr)
-  eq_dates <- c(seq(Sep_eq - days(20), Sep_eq + days(20), by = 'day'),
-                seq(Mar_eq - days(20), Mar_eq + days(20), by = 'day')
+                                 Sep_eq, Mar_eq, equinox_days = 20,
+                                 score_factor = 0.5){
+  eq_dates <- c(seq(Sep_eq - days(equinox_days), Sep_eq + days(equinox_days), by = 'day'),
+                seq(Mar_eq - days(equinox_days), Mar_eq + days(equinox_days), by = 'day')
   )
   
   df_seg2 <- df_seg %>%
@@ -436,7 +433,7 @@ equinox_interference <- function(df_seg = segments1, track = df_trip2,
     dplyr::mutate(Confidence = ifelse(Eq == T & Breed == 'mig' &
                                        Confidence < 3, 
                                       # 2*sd.x < sd.y,
-                                      Confidence/2, Confidence))%>%
+                                      Confidence * score_factor, Confidence))%>%
     ungroup()
   
   
@@ -446,7 +443,7 @@ equinox_interference <- function(df_seg = segments1, track = df_trip2,
 
 ################################################################################
 
-segment_correction <- function(df_seg = segments2){
+segment_correction <- function(df_seg = segments2, adv){
   
   median_sq_disp <- median(df_seg$sq_disp, na.rm = T)
   mean_R2n_mean <- mean(df_seg$R2n_mean, na.rm = T)
@@ -455,10 +452,12 @@ segment_correction <- function(df_seg = segments2){
     # Equinox interference
     df_seg <- df_seg %>%
       dplyr::mutate(Breed = case_when(Breed == 'mig' & Eq == T & 
-                                     sq_disp < median_sq_disp & 2*sd.x < sd.y ~ 
+                                     sq_disp < median_sq_disp &
+                                       adv$eq_sd_ratio_mig * sd.x < sd.y ~ 
                                        ifelse(R2n_mean < mean_R2n_mean ,'B', 'W'), 
-                                     Breed == 'B' & Eq == T & (sd.x > 1 | sd.y > 1) ~
-                                       ifelse(sd.x > 4*sd.y, 'mig', Breed),
+                                     Breed == 'B' & Eq == T &
+                                       (sd.x > adv$eq_sd_limit | sd.y > adv$eq_sd_limit) ~
+                                       ifelse(sd.x > adv$eq_sd_ratio_breed * sd.y, 'mig', Breed),
                                      T ~ Breed))
   }
   
@@ -467,14 +466,14 @@ segment_correction <- function(df_seg = segments2){
   # Wintering area classified as breeding area
   segs4 <- df_seg %>%
     dplyr::mutate(Breed = ifelse(Breed == 'B' & R2n_mean > mean_R2n_mean &
-                                   straightness < 0.2, 'W', Breed))
+                                   straightness < adv$corr_straightness, 'W', Breed))
   
   # Migrating area classified as breeding area
   segs5 <- segs4 %>%
     mutate(
-      Breed = ifelse(Breed == 'B' & Confidence < 1.5 & 
+      Breed = ifelse(Breed == 'B' & Confidence < adv$corr_score & 
                        (lead(Breed) == 'mig' | lag(Breed) == 'mig') &
-                       straightness > 0.2, 
+                       straightness > adv$corr_straightness, 
                      case_when(
                        sq_disp > median_sq_disp ~ 'mig',
                        is.nan(sq_disp) ~ Breed,
@@ -489,7 +488,8 @@ segment_correction <- function(df_seg = segments2){
   # Migrating area classified as wintering area
   segs7 <- segs6 %>%
     dplyr::mutate(Breed = ifelse(Breed == 'W' & sq_disp > median_sq_disp & 
-                                   sinuosity < 1 & straightness > 0.2, 'mig', Breed))
+                                   sinuosity < adv$corr_sinuosity &
+                                   straightness > adv$corr_straightness, 'mig', Breed))
   
   # Impsible situations
   out <- segs7 %>%
