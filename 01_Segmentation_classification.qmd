@@ -80,6 +80,9 @@ We will work again through a loop.
 
 ```{r}
 i= 1
+seg.list <- list()
+seg.list2 <- list()
+tracks_list <- list()
 
 info<- mdata3[i,]
 
@@ -305,7 +308,7 @@ seg.list2[i] <- list(seg_df)
 seg_all2 <- plyr::ldply(seg.list2, data.frame)
 
 # Track with phenology classification
-tracks_list[i] <- list(df_trip5)
+tracks_list[i] <- list(track_df5)
 track_all <- plyr::ldply(tracks_list, data.frame)
 ```
 

@@ -33,12 +33,12 @@ source('functions/phenology_dates_functions.R')
 
 ## 3. Load tracking data and metadata
 
-Besides metadata and tracks, we load the **wintering areas** shapefile. This file contains the different ecoregions of the Atlantic ocean where seabirds like shearwaters can winter. These ecoregions were defined by ...  and the shapefile is adapted by Virginia et al. (2025), where she included two ecoregions more (Equatorial Atlantic and South Atlantic). These ecoregions can be adapted for other species and in the context of other oceans and seas.
+Besides metadata and tracks, we load the **wintering areas** shapefile. This file contains the different ecoregions of the Atlantic ocean where seabirds like shearwaters can winter. These ecoregions were defined by ... and the shapefile is adapted by Virginia et al. (2025), where she included two ecoregions more (Equatorial Atlantic and South Atlantic). These ecoregions can be adapted for other species and in the context of other oceans and seas.
 
 ```{r}
 #Metadata
 # Use the same example data as in script 01: 'GLS' or 'GPS'
-example <- 'GLS'
+example <- 'GPS'
 
 mdata3 <- read_csv(paste0('input/', example, '_metadata_example.csv'), col_names = TRUE)
 
@@ -62,10 +62,10 @@ world <- rnaturalearth::ne_countries(scale = "large", returnclass = "sf")
 sf_use_s2(FALSE)
 ```
 
-
 ## 4. Migration phenology estimation
 
 ### 4.1. Load track data and metadata
+
 ```{r}
 i = 1
 
@@ -92,12 +92,11 @@ col.lon <- info$Colony.lon
 
 ### 4.2. Check and assing phenological periods
 
-In this step we count the number of periods of each phenological behaviour. Ideally, a migratory track will contain a pre-migration breeding period (B1), a post-nuptial migration period (mig1), a wintering period (W1), a pre-nuptial migration period (mig2) and a post-migratio breeding period (B2). However, in some cases, the track can contain more than one wintering period (e.g.,  the W1, W2, W3), and therefore, more than one migration period between wintering periods. These migration periods between wintering areas we still consider as post-nuptial migration periods (mig1).
+In this step we count the number of periods of each phenological behaviour. Ideally, a migratory track will contain a pre-migration breeding period (B1), a post-nuptial migration period (mig1), a wintering period (W1), a pre-nuptial migration period (mig2) and a post-migratio breeding period (B2). However, in some cases, the track can contain more than one wintering period (e.g., the W1, W2, W3), and therefore, more than one migration period between wintering periods. These migration periods between wintering areas we still consider as post-nuptial migration periods (mig1).
 
 It is very important to get the results that this part of the procedure is going well. Sometimes there are little mistakes in th assignation of the phenological stage to some positions (many times as a consequence of the supervised re-classification). For example, if there are four positions assigned to "mig1" inside the "B1" period, we will get two breeding periods: "B1", "mig1", "B2" and then, the real "B2" period will be "B3".
 
 Because all of this, we check and correct this mistakes and then count the number of each phenological stages.
-
 
 ```{r}
 # Correct possible mistakes
@@ -126,7 +125,7 @@ BW_periods
 
 ### 4.3. Data format
 
-We are going to use `track2KBA` package to calculate the KDE. This package needs the data in a specific format. We will use the function `formatFields` to format the tracking data. 
+We are going to use `track2KBA` package to calculate the KDE. This package needs the data in a specific format. We will use the function `formatFields` to format the tracking data.
 
 ```{r}
 track_f <- formatFields(dataGroup = track.ph2, 
@@ -239,6 +238,7 @@ if(nrow(WAs) == 0){
 ### 4.5. Detect resident individuals
 
 Some species are partially migrant. What this means is, although the majority of the individuals migrate, part of them stay in areas close to their breeding area.
+
 ```{r}
 if(all(track_f$Breed3 == 'B1')){
   Migrant <- 'Resident'
@@ -247,7 +247,7 @@ if(all(track_f$Breed3 == 'B1')){
 }
 ```
 
-### 4.6. KDE phenology determination 
+### 4.6. KDE phenology determination
 
 Before do the loop, we separate into a list each stationary stage of the track (breeding and wintering periods) using the function `phen_periods`. These periods include the stationary stage (B or W) joined to the previous and following migratory periods. What that means, to determine the wintering area we calculate the 90% KDE of mig1 + W1 + mig2, whereas for the pre-migration breeding area, we join B1 + mig1.
 
@@ -290,7 +290,8 @@ for (k in names(ph_seg.list)) {
 }
 ```
 
-When we work with partial migratory species, the following lines are recommended to be sure that 
+When we work with partial migratory species, the following lines are recommended to be sure that
+
 ```{r}
 if(Migrant == 'Resident'){
   results_list[["B1"]][["dep_date"]] <- as.Date(NA)
@@ -298,7 +299,9 @@ if(Migrant == 'Resident'){
 ```
 
 ### 4.7. Plot phenology
+
 The map summarize the results of the phenological dates extraction.
+
 ```{r}
 map_ph <-  phen_map(track = track_f, col.lat = col.lat, col.lon = col.lon, results_list, world)
 
@@ -306,7 +309,9 @@ map_ph
 ```
 
 ### 4.8. Saving phenological dates
-We store the data in a data frame that can be 
+
+We store the data in a data frame that can be
+
 ```{r}
 phen_KDEdates <- extract_phen_dates(results_list)
 
@@ -327,4 +332,3 @@ phen.all <- plyr::ldply(phen.list, data.frame)
 ```{r}
 write_csv(phen.all, file = 'output/Phenology.csv')
 ```
-
