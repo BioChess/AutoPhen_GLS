@@ -58,7 +58,7 @@ ids <-unique(tracks.ph$ID)
 w.areas <- read_sf(dsn = "input/wintering_areas")
 ecoregions <- w.areas %>% dplyr::select(ECOREGION)
 
-world <- rnaturalearth::ne_countries(scale = "large", returnclass = "sf")
+world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
 sf_use_s2(FALSE)
 ```
 
@@ -264,8 +264,6 @@ for (k in names(ph_seg.list)) {
   print(k)
   ph_seg <- ph_seg.list[[k]]
   
-  rle_ph3 <- rle(df_format[['Breed3']])
-  
   stg <- ph_seg[!(ph_seg$Breed3 %in% c("mig1", "mig2")), ]
   
   if (is.null(ph_seg) || nrow(stg) == 0) {
@@ -322,11 +320,13 @@ phen <- data.frame(Ring = ring, Sp = sp, Colony = col.name,
 )
 ```
 
-When we are working in loops we can save the results of phenology extraction in a list
+When we are working with several tracks, we save the results of each track in a list and join them at the end.
 
-```{r, eval=FALSE, include=TRUE}
-phen.list[i] <-list(phen.df)
-phen.all <- plyr::ldply(phen.list, data.frame)
+```{r}
+if (!exists('phen.list')) phen.list <- list()
+phen.list[[geo_trip]] <- phen
+phen.all <- dplyr::bind_rows(phen.list)
+phen.all
 ```
 
 ```{r}
