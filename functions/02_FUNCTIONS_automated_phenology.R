@@ -309,7 +309,7 @@ segment_class <- function (mode_segclust =  mode_segclust,
                            add.metrics = NULL,
                            col.lon = NULL, col.lat = NULL){
   
-  required_packages <- c("trajr", "tidyverse", "segclust2d", "furrr")
+  required_packages <- c("trajr", "tidyverse", "segclust2d", "ClusterR", "tidymodels", "tidyclust", "furrr")
   invisible(lapply(required_packages, function(p) {
     if (!require(p, character.only = TRUE)) {
       stop(paste("Package", p, "is required but not loaded. Please install it and try again."))

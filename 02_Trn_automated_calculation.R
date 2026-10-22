@@ -30,29 +30,25 @@ if ("purrr" %in% .packages()) {
 }
 
 # Load custom functions
-# twilight_cleanup() and move_twilights() are part of the SEATRACK automated
-# GLS procedure (Braathen et al. 2021, NINA Report 1893). They are not
-# distributed in this repository. Contact the SEATRACK project to obtain them
-# and save them in gls_preprocessing/functions/ before running this script.
-source('gls_preprocessing/functions/FUNCTION_twilight_cleanup.R')
-source('gls_preprocessing/functions/FUNCTION_move_twilights.R')
-source('gls_preprocessing/functions/gls_preprocessing_functions.R')
+source('functions/FUNCTION_twilight_cleanup.R')
+source('functions/FUNCTION_move_twilights.R')
+source('functions/01_FUNCTIONS_GLS_analysis.R')
 
 
 # =============================================================================
 # 2. READ METADATA AND CALIBRATION PARAMETERS ----
 # =============================================================================
 
-mdata     <- read_csv('gls_preprocessing/input/GLS.files.csv',                    col_names = TRUE)
-calibs    <- read_csv('gls_preprocessing/output/Supervised_calibrations_SGAT.csv', col_names = TRUE)
-calib.sum <- read_csv('gls_preprocessing/output/Summary_SGAT_calibrations.csv',    col_names = TRUE)
+mdata     <- read_csv('input/GLS.files.csv',                    col_names = TRUE)
+calibs    <- read_csv('output/Supervised_calibrations_SGAT.csv', col_names = TRUE)
+calib.sum <- read_csv('output/Summary_SGAT_calibrations.csv',    col_names = TRUE)
 
 
 # =============================================================================
 # 3. MAIN LOOP: TWILIGHT CALCULATION PER GLS ----
 # =============================================================================
 
-gls.dir <- paste0(getwd(), '/gls_preprocessing/input/GLS/')
+gls.dir <- paste0(getwd(), '/input/GLS/')
 
 for (i in seq_len(nrow(mdata))) {
 
@@ -220,11 +216,11 @@ for (i in seq_len(nrow(mdata))) {
 
   file.trn <- paste0(geo_trip, '_', info$Sp, '_', year_rec, '_', info$Colony, '_automated.trn')
 
-  if (!dir.exists('gls_preprocessing/output/trn'))
-    dir.create('gls_preprocessing/output/trn', recursive = TRUE, showWarnings = FALSE)
+  if (!dir.exists('output/trn'))
+    dir.create('output/trn', recursive = TRUE, showWarnings = FALSE)
 
   write.table(trn,
-              file      = paste0('gls_preprocessing/output/trn/', file.trn),
+              file      = paste0('output/trn/', file.trn),
               sep       = ',',
               col.names = TRUE,
               row.names = FALSE,
@@ -241,11 +237,11 @@ for (i in seq_len(nrow(mdata))) {
 
   file.trn.bak <- paste0(geo_trip, '_', info$Sp, '_', year_rec, '_', info$Colony, '.trn')
 
-  if (!dir.exists('gls_preprocessing/output/trn_bak'))
-    dir.create('gls_preprocessing/output/trn_bak', recursive = TRUE, showWarnings = FALSE)
+  if (!dir.exists('output/trn_bak'))
+    dir.create('output/trn_bak', recursive = TRUE, showWarnings = FALSE)
 
   write.table(trn.bak,
-              file      = paste0('gls_preprocessing/output/trn_bak/', file.trn.bak),
+              file      = paste0('output/trn_bak/', file.trn.bak),
               sep       = ',',
               col.names = FALSE,
               row.names = FALSE,
@@ -262,5 +258,5 @@ for (i in seq_len(nrow(mdata))) {
 # 4. SAVE UPDATED METADATA ----
 # =============================================================================
 
-write_csv(mdata, file = 'gls_preprocessing/input/GLS.files2.csv')
+write_csv(mdata, file = 'input/GLS.files2.csv')
 cat('Updated metadata saved to input/GLS.files2.csv\n')

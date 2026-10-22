@@ -46,16 +46,16 @@ if ("purrr" %in% .packages()) {
 }
 
 # Load custom functions
-source("gls_preprocessing/functions/gls_preprocessing_functions.R")
+source("functions/01_FUNCTIONS_GLS_analysis.R")
 
 
 # =============================================================================
 # 3. READ METADATA AND DEFINE THRESHOLDS ----
 # =============================================================================
 
-mdata     <- read_csv('gls_preprocessing/input/GLS.files.csv',       col_names = TRUE)
-info_file <- read_csv('gls_preprocessing/input/GLS.info.csv',        col_names = TRUE)
-calib.info <- read_csv('gls_preprocessing/input/Info.calibrations.csv')
+mdata     <- read_csv('input/GLS.files.csv',       col_names = TRUE)
+info_file <- read_csv('input/GLS.info.csv',        col_names = TRUE)
+calib.info <- read_csv('input/Info.calibrations.csv')
 
 # Light threshold: value above which it is considered daytime (typically 1.5-2)
 threshold <- 2
@@ -78,7 +78,7 @@ method <- "gamma"
 #   - Step 3: post-recovery calibration
 # =============================================================================
 
-gls.dir        <- paste0(getwd(), '/gls_preprocessing/input/GLS/')
+gls.dir        <- paste0(getwd(), '/input/GLS/')
 calib.list_SGAT <- list()  # stores one row per GLS
 
 for (i in seq_len(nrow(mdata))) {
@@ -193,12 +193,12 @@ for (i in seq_len(nrow(mdata))) {
           ) %>%
           dplyr::select(date_time, type, confidence)
 
-        if (!dir.exists('gls_preprocessing/output/calibrations'))
-          dir.create('gls_preprocessing/output/calibrations', recursive = TRUE, showWarnings = FALSE)
+        if (!dir.exists('output/calibrations'))
+          dir.create('output/calibrations', recursive = TRUE, showWarnings = FALSE)
 
         file_trn <- paste(geoID, sp, year_rec, col.name, step_name, '.trn', sep = '_')
         write.table(trn,
-                    file      = paste0('gls_preprocessing/output/calibrations/', file_trn),
+                    file      = paste0('output/calibrations/', file_trn),
                     sep       = ',',
                     col.names = FALSE,
                     row.names = FALSE,
@@ -270,7 +270,7 @@ for (i in seq_len(nrow(mdata))) {
   cat('Geo (', i, ')', geoID, 'done\n\n')
 }
 
-write_csv(mdata, file = 'gls_preprocessing/input/GLS.files.csv')
+write_csv(mdata, file = 'input/GLS.files.csv')
 cat('Metadata updated with Calibrations and Calib.param columns\n')
 
 # =============================================================================
@@ -348,7 +348,7 @@ hist(calib.all_SGAT2$mean_zenith0,     main = "Mean zenith0",     xlab = "")
 hist(calib.all_SGAT2$mean_alpha.mean,  main = "Mean alpha.mean",  xlab = "")
 hist(calib.all_SGAT2$mean_alpha.sd,    main = "Mean alpha.sd",    xlab = "")
 
-write_csv(calib.all_SGAT2, file = 'gls_preprocessing/output/Supervised_calibrations_SGAT.csv')
+write_csv(calib.all_SGAT2, file = 'output/Supervised_calibrations_SGAT.csv')
 cat('Calibration parameters saved to output/Supervised_calibrations_SGAT.csv\n')
 
 
@@ -370,5 +370,5 @@ calib_SGAT_summary <- calib.all_SGAT2 %>%
   arrange(Year) %>%
   distinct()
 
-write_csv(calib_SGAT_summary, file = 'gls_preprocessing/output/Summary_SGAT_calibrations.csv')
+write_csv(calib_SGAT_summary, file = 'output/Summary_SGAT_calibrations.csv')
 cat('Summary saved to output/Summary_SGAT_calibrations.csv\n')
