@@ -44,7 +44,7 @@ source('functions/segmentation_classification_functions.R')
 
 ```{r}
 # Example data: 'GLS' (Cory's shearwater, 7 tracks) or 'GPS' (Audouin's gull, 1 track)
-example <- 'GLS'
+example <- 'GPS'
 
 mdata3 <- read_csv(paste0('input/', example, '_metadata_example.csv'), col_names = TRUE)
 tracks <- read_csv(paste0('input/', example, '_positions_example.csv'), col_names = TRUE)
@@ -79,7 +79,7 @@ We will work again through a loop.
 ### 4.1. Read track information
 
 ```{r}
-i= 2
+i= 1
 
 info<- mdata3[i,]
 
