@@ -132,3 +132,4 @@ if (!use_renv) {
 # renv::snapshot(type = "all")     # writes renv.lock
 #
 # After this, commit renv.lock, .Rprofile and renv/activate.R to GitHub.
+
