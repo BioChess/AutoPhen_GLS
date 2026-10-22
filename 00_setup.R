@@ -49,7 +49,8 @@ core_pkgs <- c(
   # Spatial data and maps
   "sf", "spData", "rnaturalearth", "rnaturalearthdata",
   # Segmentation, classification and trajectory metrics (step 1)
-  "adehabitatLT", "adehabitatHR", "segclust2d", "trajr", "furrr", "caTools",
+  "adehabitatLT", "adehabitatHR", "segclust2d", "trajr", "recipes", "furrr",
+  "caTools",
   # Interactive reclassification (step 2)
   "shiny", "leaflet", "DT",
   # Kernel density estimation (step 3)

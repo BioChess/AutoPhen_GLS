@@ -20,11 +20,13 @@ execute:
 Every time we do not need to install and load packages from GitHub or other external repository, we use `pacman` function. For the following code, we need two main packages `adehabitatHR` and `segclust2d` packages
 
 ```{r}
-pacman::p_load('devtools',
-               'tidyverse', 'plyr', 'lubridate', 'readxl', 'readr', # data carpenter
-                'sf', 'spData', # spatial data
-               'adehabitatHR',  # migrate behaviour and kernels
+pacman::p_load('tidyverse', 'plyr', 'lubridate', 'readxl', 'readr', # data carpenter
+               'sf', 'spData', # spatial data
+               'adehabitatLT', 'adehabitatHR',  # trajectories and kernels
                'segclust2d', # spatial segmentation and clustering
+               'trajr', # trajectory metrics
+               'recipes', # normalisation of metrics before clustering
+               'furrr', # parallel computing
                'units', 
                'ggplot2', 'ggpubr', 'ggspatial',# plots
                'patchwork', 'cowplot', # composing plots
@@ -41,10 +43,11 @@ source('functions/segmentation_classification_functions.R')
 ## 3. Load tracking data and metadata
 
 ```{r}
-mdata3 <- read_csv('input/GLS_metadata_example.csv', col_names = TRUE)
+# Example data: 'GLS' (Cory's shearwater, 7 tracks) or 'GPS' (Audouin's gull, 1 track)
+example <- 'GLS'
 
-# dataset <- 'v1'
-tracks <- read_csv('input/GLS_positions_example.csv', col_names = TRUE)
+mdata3 <- read_csv(paste0('input/', example, '_metadata_example.csv'), col_names = TRUE)
+tracks <- read_csv(paste0('input/', example, '_positions_example.csv'), col_names = TRUE)
 
 ```
 
