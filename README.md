@@ -118,7 +118,12 @@ The folder `input/` contains positions of seven Cory's shearwater (*Calonectris 
 
 ## Parameters
 
-Default values and the reasoning behind them will be listed here (and in a single parameter file) in the revised version.
+All settings are in `parameters.R`, which is loaded by scripts 01 and 03. It has two parts:
+
+- **User parameters**: a few settings that may need to be adapted to your data or species (type of data, positions per day, equinox window, maximum number of segments, range of clusters, minimum duration of segments and stages, KDE level). Each one is explained in the file.
+- **Advanced parameters**: thresholds of the classification rules. They are part of the method and are listed to make it transparent, but most users should not change them.
+
+Phenological dates are defined as: **arrival** = first position inside the KDE of the breeding or wintering area; **departure** = first position outside the KDE after the last position inside it.
 
 ---
 

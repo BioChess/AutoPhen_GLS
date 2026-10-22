@@ -29,6 +29,7 @@ We also load own functions designed to detect key phenological dates of migrator
 
 ```{r}
 source('functions/phenology_dates_functions.R')
+source('parameters.R')
 ```
 
 ## 3. Load tracking data and metadata
@@ -101,7 +102,7 @@ Because all of this, we check and correct this mistakes and then count the numbe
 ```{r}
 # Correct possible mistakes
 
-track.ph2 <- check_phen(track.ph, "Breed2")
+track.ph2 <- check_phen(track.ph, "Breed2", min_length = min_stage_length)
 
 track.ph2$Breed3 <- phen_periods(track.ph2$Breed2)
 
@@ -278,10 +279,14 @@ for (k in names(ph_seg.list)) {
   }
   
   # Calculate KDE for non-migratory periods
-  KDE90_sf <- calculate_kde(ph_seg, proj = 4326)
+  KDE90_sf <- calculate_kde(ph_seg, proj = 4326, level = kde_level,
+                            min_positions = adv$kde_min_positions,
+                            bandwidth = adv$kde_bandwidth,
+                            fallback_grid = adv$kde_fallback_grid,
+                            fallback_extent = adv$kde_fallback_extent)
   
   # Find first and last points inside KDE
-  phen_dates <- find_dates(ph_seg, KDE90_sf, proj = 4326)
+  phen_dates <- find_dates(ph_seg, KDE90_sf, proj = 4326, stage = k)
   
   # Store results
   results_list[[k]] <- c(list(KDE90_sf = KDE90_sf), phen_dates)

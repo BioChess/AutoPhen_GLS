@@ -34,10 +34,11 @@ pacman::p_load('tidyverse', 'plyr', 'lubridate', 'readxl', 'readr', # data carpe
 )
 ```
 
-We also load own functions, specifically designed for working with GLS data.
+We also load own functions, specifically designed for working with GLS data, and the parameters of the workflow (see `parameters.R`).
 
 ```{r}
 source('functions/segmentation_classification_functions.R') 
+source('parameters.R')
 ```
 
 ## 3. Load tracking data and metadata
@@ -53,23 +54,11 @@ tracks <- read_csv(paste0('input/', example, '_positions_example.csv'), col_name
 
 ## 4. Defining trajectory metrics
 
-We define the trajectory metrics that we will use to classify the migratory behaviour of the individuals. Algorithm use straightness, sinuosity and vector angle as defect, and it is suported in other accesorial variables that can refine the classification.
+We define the trajectory metrics that we will use to classify the migratory behaviour of the individuals. The algorithm always uses straightness, sinuosity and the mean vector of turning angles (`adv$core_metrics`), and tests combinations of other metrics that can refine the classification (`adv$extra_metrics` and `adv$paired_metrics`, defined in `parameters.R`).
 
 ```{r}
-
-# Define the non-paired metrics
-add.m <- c("mu.dist", "sd.dist", "Emax", "sq_disp", "R2n_sd", "dc_mean", "dc_sd")
-
-# Paired metrics
-pair.m <- list(
-  mu_xy = c("mu.x", "mu.y"),
-  sd_xy = c("sd.x", "sd.y"),
-  mu_dxy = c("mu.dx", "mu.dy"),
-  sd_dxy = c("sd.dx", "sd.dy")
-)
-
-# Create a list of all metrics groups (paired and non-paired)
-add.metrics <- c(names(pair.m), add.m)
+# All groups of additional metrics (paired and non-paired)
+add.metrics <- c(names(adv$paired_metrics), adv$extra_metrics)
 ```
 
 ## 4. Classification of tracking data
@@ -149,11 +138,14 @@ First, we remove erroneus positions, where the distance among them is too large.
 
 ```{r}
 # Clean erroneus positions
-track_df2 <- clean_positions(data = track_df, dist_threshold = 40)
+track_df2 <- clean_positions(data = track_df, dist_threshold = adv$max_step)
 
-track_df3 <- remove_duplicates(data = track_df2, equinox_days = 20, 
+track_df3 <- remove_duplicates(data = track_df2, equinox_days = eq_window_days, 
                               # cdays = cdays,
-                              Sep_eq = Sep_eq, Mar_eq = Mar_eq, dup_threshold = 4)
+                              Sep_eq = Sep_eq, Mar_eq = Mar_eq,
+                              dup_threshold = adv$max_repeated,
+                              edge_positions = adv$edge_positions,
+                              col.lon = col.lon, col.lat = col.lat)
 ```
 
 ### 4.3. Segmentation and clustering
@@ -161,9 +153,9 @@ track_df3 <- remove_duplicates(data = track_df2, equinox_days = 20,
 ```{r}
 
 mode_segclust <- segclust(track_df3,
-                          Kmax = 15,
-                          lmin = 5,
-                          ncluster = 5:10,
+                          Kmax = Kmax,
+                          lmin = lmin,
+                          ncluster = ncluster,
                           seg.var = c('x', 'y'),
                           order.var = 'x',
                           diag.var = c('dx', 'dy', 'R2n', 'x', 'y', 'dist'),
@@ -173,10 +165,9 @@ mode_segclust <- segclust(track_df3,
 bic <- BIC(mode_segclust)
 bic_max <- bic %>% filter(BIC == max(BIC))
 
-# Number of segments
-nseg <- bic_max$nseg
-# Number of clusters
-ncluster <- bic_max$ncluster
+# Number of segments and clusters selected by BIC
+nseg_best <- bic_max$nseg
+ncluster_best <- bic_max$ncluster
 
 # Plots
 segclust_plot <- plot(mode_segclust) # variables distribution
@@ -208,20 +199,23 @@ segments1 <- segment_class(mode_segclust = mode_segclust,
                            option.by = 'seg',
                            add.metrics = add.metrics,
                            col.lon = col.lon,
-                           col.lat = col.lat)
+                           col.lat = col.lat,
+                           adv = adv, lmin = lmin)
 # Equinox correction
 segments2 <- equinox_interference(df_seg = segments1$df_clust, 
                                   track = track_df3,
-                                  Sep_eq, Mar_eq)
+                                  Sep_eq, Mar_eq,
+                                  equinox_days = eq_window_days,
+                                  score_factor = adv$eq_score_factor)
 
 
-segments3 <- segment_correction(df_seg = segments2)
+segments3 <- segment_correction(df_seg = segments2, adv = adv)
 
 segments3 <- segments3 %>%
   mutate(
     Check = case_when(
-      Confidence < 2 ~ 'Check',
-      Confidence >= 2 & Eq & !(row_number() %in% c(1, n())) & 
+      Confidence < adv$check_score ~ 'Check',
+      Confidence >= adv$check_score & Eq & !(row_number() %in% c(1, n())) & 
         (lag(Breed) != Breed | lead(Breed) != Breed) ~ 'Check',
       TRUE ~ 'Ok'
     )
@@ -231,7 +225,7 @@ segments3 <- cbind(ID = geo_trip, Sp = sp, segments3)
 # Summary of segmentation/clustering information
 seg_df <- data.frame(Ring = ring, Sp = sp, Colony = col.name,
                      ID = geo_trip,
-                     n_seg = nseg, n_cluster = ncluster, 
+                     n_seg = nseg_best, n_cluster = ncluster_best, 
                      Breed_class = paste(segments3$Breed, collapse = '-'),
                      n_seg_B = length(segments3$Breed[segments3$Breed == 'B']),
                      n_seg_mig = length(segments3$Breed[segments3$Breed == 'mig']),
@@ -268,11 +262,11 @@ track_df5 <- track_df4 %>%
     TRUE ~ Breed
   )) %>%
   mutate(Equinox = ifelse(
-    date >= (as.Date(Sep_eq) - days(20)) & 
-      date <= (as.Date(Sep_eq) + days(20)), 'Sep',
+    date >= (as.Date(Sep_eq) - days(eq_window_days)) & 
+      date <= (as.Date(Sep_eq) + days(eq_window_days)), 'Sep',
     ifelse(
-      date >= (as.Date(Mar_eq) - days(20)) & 
-        date <= (as.Date(Mar_eq) + days(20)), 'Mar', 'No'
+      date >= (as.Date(Mar_eq) - days(eq_window_days)) & 
+        date <= (as.Date(Mar_eq) + days(eq_window_days)), 'Mar', 'No'
     )
   ))
 

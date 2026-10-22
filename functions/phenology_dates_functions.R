@@ -108,11 +108,13 @@ subset_to_kde <- function(data, column) {
 
 ################################################################################
 
-calculate_kde <- function(ph_seg, proj= 4326) {
+calculate_kde <- function(ph_seg, proj = 4326, level = 90, min_positions = 5,
+                          bandwidth = 'href', fallback_grid = 1000,
+                          fallback_extent = 4) {
   # Filter non-migratory points
   non_migratory <- ph_seg[!(ph_seg$Breed3 %in% c("mig1", "mig2")), ]
   
-  if (nrow(non_migratory) <= 5) {
+  if (nrow(non_migratory) <= min_positions) {
     # Not enough points for KDE
     return(NULL)
   }
@@ -122,13 +124,15 @@ calculate_kde <- function(ph_seg, proj= 4326) {
   hVals <- findScale(tracks = p_tracks, scaleARS = FALSE, sumTrips = NULL)
   
   # Calculate KDE
-  KDE <- estSpaceUse(tracks = p_tracks, scale = hVals$href, levelUD = 90, polyOut = TRUE)
+  KDE <- estSpaceUse(tracks = p_tracks, scale = hVals[[bandwidth]], levelUD = level,
+                     polyOut = TRUE)
   KDE90_sf <- KDE$UDPolygons
    # mapKDE(KDE$UDPolygons)
   # Handle alternative KDE calculation if KDE90_sf is NULL
   if (is.null(KDE90_sf)) {
-    kuds <- kernelUD(p_tracks, h = (hVals$href * 1000), grid = 1000, extent = 4, same4all = FALSE)
-    KDE90 <- getverticeshr(kuds, percent = 90)
+    kuds <- kernelUD(p_tracks, h = (hVals[[bandwidth]] * 1000), grid = fallback_grid,
+                     extent = fallback_extent, same4all = FALSE)
+    KDE90 <- getverticeshr(kuds, percent = level)
     KDE90_sf <- st_as_sf(spTransform(KDE90, CRS(proj)))
   }
   
@@ -136,7 +140,7 @@ calculate_kde <- function(ph_seg, proj= 4326) {
 }
 
 # Function to find first and last points inside KDE
-find_dates <- function(ph_seg, KDE90_sf, proj = proj) {
+find_dates <- function(ph_seg, KDE90_sf, proj = proj, stage) {
   if (is.null(KDE90_sf)) {
     # If KDE is NULL, return NA for points and dates
     return(list(arr_point = data.frame(Longitude = NA, Latitude = NA), arr_date = NA,
@@ -167,17 +171,17 @@ find_dates <- function(ph_seg, KDE90_sf, proj = proj) {
   
   # Calculate departure or arrival based on period type
   if (nrow(KDE90_points) > 0) {
-    if (k == "B1") {
+    if (stage == "B1") {
       # Calculate departure only
       dep_index <- min(which(ph_seg$DateTime == max(KDE90_points$DateTime)))
       dep_point <- ph_seg[dep_index + 1, c("Longitude", "Latitude")]
       dep_date <- as.Date(ph_seg$DateTime[dep_index + 1])
-    } else if (k == "B2") {
+    } else if (stage == "B2") {
       # Calculate arrival only
       arr_index <- min(which(ph_seg$DateTime == min(KDE90_points$DateTime)))
       arr_point <- ph_seg[arr_index, c("Longitude", "Latitude")]
       arr_date <- as.Date(ph_seg$DateTime[arr_index])
-    } else if (grepl("^W", k)) {
+    } else if (grepl("^W", stage)) {
       # Calculate both arrival and departure for W periods
       dep_index <- min(which(ph_seg$DateTime == max(KDE90_points$DateTime)))
       dep_point <- ph_seg[dep_index + 1, c("Longitude", "Latitude")]
