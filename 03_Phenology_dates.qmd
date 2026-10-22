@@ -37,7 +37,10 @@ Besides metadata and tracks, we load the **wintering areas** shapefile. This fil
 
 ```{r}
 #Metadata
-mdata3 <- read_csv('input/GLS_metadata_example.csv', col_names = TRUE)
+# Use the same example data as in script 01: 'GLS' or 'GPS'
+example <- 'GLS'
+
+mdata3 <- read_csv(paste0('input/', example, '_metadata_example.csv'), col_names = TRUE)
 
 # Tracking data
 tracks.ph <- read_csv('output/Phenology_tracks_corrected.csv')
