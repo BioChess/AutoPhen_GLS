@@ -581,7 +581,7 @@ plot_segmentation <- function(segclust = NULL, map = NULL,
   
   if(!is.null(breed)){
     require(rnaturalearth)
-    world <- ne_countries(scale = "large", returnclass = "sf")
+    world <- ne_countries(scale = "medium", returnclass = "sf")
     data <- data %>%
       mutate(
         Shape = case_when(Equinox == 'Sep' ~ 24,
