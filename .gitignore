@@ -1,5 +1,22 @@
+# RStudio and R session files
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
 .positai
+
+# Quarto rendering
+*_files/
+.quarto/
+*.html
+
+# renv: the project library is local; only renv.lock, .Rprofile and
+# renv/activate.R are shared (renv/.gitignore handles the rest)
+renv/library/
+renv/staging/
+renv/local/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
