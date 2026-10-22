@@ -42,8 +42,16 @@ example <- 'GLS'
 
 mdata3 <- read_csv(paste0('input/', example, '_metadata_example.csv'), col_names = TRUE)
 
-# Tracking data
-tracks.ph <- read_csv('output/Phenology_tracks_corrected.csv')
+# Tracking data: use the corrected classification (output of script 02) or,
+# if script 02 was not run, the automated classification (output of script 01)
+use_corrected <- FALSE
+
+tracks_file <- ifelse(use_corrected, 'output/Phenology_tracks_corrected.csv',
+                      'output/Phenology_tracks.csv')
+tracks.ph <- read_csv(tracks_file)
+
+# The equinox flag is only used for plotting
+if (!'Equinox' %in% names(tracks.ph)) tracks.ph$Equinox <- 'No'
 ids <-unique(tracks.ph$ID)
 
 # Wintering areas and ecoregions
