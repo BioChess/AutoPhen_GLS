@@ -26,7 +26,7 @@ pacman::p_load('tidyverse', 'dplyr', 'lubridate', # data carpenter
 We load our own functions to create an interactive map to check de classification of the track positions.
 
 ```{r}
-source('functions/supervised_reclassification_functions.R')
+source('functions/03_FUNCTIONS_Supervised_reclassification.R')
 ```
 
 ## 3. Load tracking data and metadata

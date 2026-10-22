@@ -20,6 +20,3 @@ renv/local/
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Backup twilight files created by gls_preprocessing/02 (not needed in the repository)
-gls_preprocessing/output/trn_bak/

@@ -28,7 +28,7 @@ pacman::p_load('tidyverse', 'dplyr', 'lubridate', 'readxl', 'readr', # data carp
 We also load own functions designed to detect key phenological dates of migratory animal tracks
 
 ```{r}
-source('functions/phenology_dates_functions.R')
+source('functions/04_FUNCTIONS_Phenology_dates.R')
 ```
 
 ## 3. Load tracking data and metadata
@@ -37,7 +37,7 @@ Besides metadata and tracks, we load the **wintering areas** shapefile. This fil
 
 ```{r}
 #Metadata
-mdata3 <- read_csv('input/GLS_metadata_example.csv', col_names = TRUE)
+mdata3 <- read_csv('input/GLS.files3.csv', col_names = TRUE)
 
 # Tracking data
 tracks.ph <- read_csv('output/Phenology_tracks_corrected.csv')

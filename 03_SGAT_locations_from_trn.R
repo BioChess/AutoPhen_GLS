@@ -30,17 +30,17 @@ if ("purrr" %in% .packages()) {
   detach("package:purrr", unload = TRUE)
 }
 
-source('gls_preprocessing/functions/gls_preprocessing_functions.R')
+source('functions/01_FUNCTIONS_GLS_analysis.R')
 
 
 # =============================================================================
 # 2. READ METADATA AND CALIBRATION PARAMETERS ----
 # =============================================================================
 
-mdata2    <- read_csv('gls_preprocessing/input/GLS.files2.csv',                    col_names = TRUE)
-calibs    <- read_csv('gls_preprocessing/output/Supervised_calibrations_SGAT.csv', col_names = TRUE)
-calib.sum <- read_csv('gls_preprocessing/output/Summary_SGAT_calibrations.csv',    col_names = TRUE)
-col.days  <- read_csv('gls_preprocessing/input/colony_dates.csv')
+mdata2    <- read_csv('input/GLS.files2.csv',                    col_names = TRUE)
+calibs    <- read_csv('output/Supervised_calibrations_SGAT.csv', col_names = TRUE)
+calib.sum <- read_csv('output/Summary_SGAT_calibrations.csv',    col_names = TRUE)
+col.days  <- read_csv('input/colony_dates.csv')
 
 
 # =============================================================================
@@ -62,7 +62,7 @@ for (i in seq_len(nrow(mdata2))) {
     next
   }
 
-  trnfile_c <- paste0('gls_preprocessing/output/trn/', trnfile)
+  trnfile_c <- paste0('output/trn/', trnfile)
 
   if (!file.exists(trnfile_c)) {
     message('Skipping geo (', i, '): trn file not found at ', trnfile_c)
@@ -256,9 +256,9 @@ raw_trips2 <- bind_rows(raw_trips2.list)
 
 if (!dir.exists('output')) dir.create('output', recursive = TRUE)
 
-write_csv(raw_trips,  file = 'gls_preprocessing/output/Raw_SGAT_tracks_tol.csv')
-write_csv(raw_trips2, file = 'gls_preprocessing/output/Raw_SGAT_tracks_tol_cdays.csv')
-write_csv(mdata2,     file = 'gls_preprocessing/input/GLS.files3.csv')
+write_csv(raw_trips,  file = 'output/Raw_SGAT_tracks_tol.csv')
+write_csv(raw_trips2, file = 'output/Raw_SGAT_tracks_tol_cdays.csv')
+write_csv(mdata2,     file = 'input/GLS.files3.csv')
 
 cat('Raw SGAT tracks saved to output/\n')
 cat('Updated metadata saved to input/GLS.files3.csv\n')

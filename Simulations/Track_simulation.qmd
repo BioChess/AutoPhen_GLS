@@ -287,11 +287,11 @@ with(sim, scan_track(time=T,x=X,y=Y))
 Both dataframes are saved in csv after the generation of all 900 simulations.
 
 ```{r}
-write.csv(tracks, file = "simulations/simulations_positions.csv", 
+write.csv(tracks, file = paste0(Sys.Date(), paste0("simulations_positions.csv")), 
              row.names = F)
 
 colnames(simulations) <- c("Main_seg_D", "Category", "Main_seg_ang", "d_BA", 
                            "d_WA", "tau.z", "tau.v", "mean_A", "min_speed",
                            "max_speed", "BA_dep", "WA_arr", "WA_dep", "BA_arr")
-write.csv(simulations, file = "simulations/simulations_data.csv")
+write.csv(simulations, file = paste0(Sys.Date(), "simulations_data.csv"))
 ```
