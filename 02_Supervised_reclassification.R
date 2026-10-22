@@ -1,6 +1,6 @@
 ################################################################################
-# 05 - Supervised Reclassification (Shiny App)
-# Adapted from 05_Supervised_reclassification.qmd
+# 02 - Supervised Reclassification (Shiny App)
+# Adapted from 02_Supervised_reclassification.qmd
 # Author: Diego Vicente-Sastre
 # Adapted for Shiny interactive windows
 ################################################################################

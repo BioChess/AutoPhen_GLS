@@ -45,16 +45,16 @@ if ("purrr" %in% .packages()) {
 ```
 
 ```{r extra_func}
-source('functions/01_FUNCTIONS_GLS_analysis.R')
+source('gls_preprocessing/functions/gls_preprocessing_functions.R')
 ```
 
 ## 3. Read metadata and calibration parameters
 
 ```{r load_data}
-mdata2    <- read_csv('input/GLS.files2.csv',                    col_names = TRUE)
-calibs    <- read_csv('output/Supervised_calibrations_SGAT.csv', col_names = TRUE)
-calib.sum <- read_csv('output/Summary_SGAT_calibrations.csv',    col_names = TRUE)
-col.days  <- read_csv('input/colony_dates.csv')
+mdata2    <- read_csv('gls_preprocessing/input/GLS.files2.csv',                    col_names = TRUE)
+calibs    <- read_csv('gls_preprocessing/output/Supervised_calibrations_SGAT.csv', col_names = TRUE)
+calib.sum <- read_csv('gls_preprocessing/output/Summary_SGAT_calibrations.csv',    col_names = TRUE)
+col.days  <- read_csv('gls_preprocessing/input/colony_dates.csv')
 ```
 
 Apart from the **metadata and calibration files**, we include a file with the dates **the animal was confirmed to be at the colony**. These dates are determined from two sources: nights when the GLS recorded no light (animal inside the burrow) and breeding-season days when the animal spent more than 75% of the night dry (close to the colony area).
@@ -70,7 +70,7 @@ i <- 1
 
 info      <- mdata2[i, ]
 trnfile   <- if_else(!is.na(info$File.trn), info$File.trn, NA_character_)
-trnfile_c <- paste0('output/trn/', trnfile)
+trnfile_c <- paste0('gls_preprocessing/output/trn/', trnfile)
 
 if (is.na(trnfile) || !file.exists(trnfile_c))
   stop('Trn file not found for geo ', info$geo_trip, ': ', trnfile_c)
@@ -277,9 +277,9 @@ raw_trips2 <- bind_rows(raw_trips2.list)
 
 if (!dir.exists('output')) dir.create('output', recursive = TRUE)
 
-write_csv(raw_trips,  file = 'output/Raw_SGAT_tracks_tol.csv')
-write_csv(raw_trips2, file = 'output/Raw_SGAT_tracks_tol_cdays.csv')
-write_csv(mdata2,     file = 'input/GLS.files3.csv')
+write_csv(raw_trips,  file = 'gls_preprocessing/output/Raw_SGAT_tracks_tol.csv')
+write_csv(raw_trips2, file = 'gls_preprocessing/output/Raw_SGAT_tracks_tol_cdays.csv')
+write_csv(mdata2,     file = 'gls_preprocessing/input/GLS.files3.csv')
 
 cat('Tracks saved to output/\n')
 cat('Updated metadata saved to input/GLS.files3.csv\n')

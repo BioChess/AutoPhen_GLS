@@ -35,16 +35,16 @@ pacman::p_load('devtools',
 We also load own functions, specifically designed for working with GLS data.
 
 ```{r}
-source('functions/02_FUNCTIONS_automated_phenology.R') 
+source('functions/segmentation_classification_functions.R') 
 ```
 
 ## 3. Load tracking data and metadata
 
 ```{r}
-mdata3 <- read_csv('input/GLS.files3.csv', col_names = TRUE)
+mdata3 <- read_csv('input/GLS_metadata_example.csv', col_names = TRUE)
 
 # dataset <- 'v1'
-tracks <- read_csv('output/Raw_SGAT_tracks_tol_cdays.csv', col_names = TRUE)
+tracks <- read_csv('input/GLS_positions_example.csv', col_names = TRUE)
 
 ```
 
@@ -316,9 +316,9 @@ track_all <- plyr::ldply(tracks_list, data.frame)
 ## 5. Saving results
 
 ```{r, eval= FALSE, include = TRUE}
-write.csv(seg_all, file = 'Segmentation_results.csv')
+write.csv(seg_all, file = 'output/Segmentation_results.csv')
 
-write.csv(seg_all2, file = 'Summary_segmentation.csv')
+write.csv(seg_all2, file = 'output/Summary_segmentation.csv')
 
-write_csv(track_all, file = 'Phenology_tracks.csv')
+write_csv(track_all, file = 'output/Phenology_tracks.csv')
 ```
