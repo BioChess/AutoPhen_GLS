@@ -5,13 +5,14 @@
 # Description: Joins the GLS positions of all species used in the paper into
 #              the two input files of the workflow, and runs basic checks.
 #
-#   Sources (folder 'raw_dir'):
-#     - clean_tracks.RData       Calonectris spp. (object 'trips.class_all';
-#                                only ID, Longitude, Latitude, DateTime are
-#                                used; species and colony from 'seg_all')
-#     - Hydrobates/*.csv         Hydrobates spp. (SGAT positions; ';' and ',')
-#     - PUFPUF/*.csv             Puffinus puffinus (SGAT positions)
-#     - *_PUFYEL_*.trj           Puffinus yelkouan (IntiProc .trj files)
+#   Sources (all of them SGAT positions):
+#     - Calonectris spp.: tracks listed in WAs_ids
+#       (subset_CALtracks_WAclassified.RData), read from 'cal_dir'
+#       (<geo_trip>_<year>_<Sp>_<Colony>_rawpoints[_cdays].csv)
+#     - Hydrobates/*.csv         Hydrobates spp. (';' separator, ',' decimals)
+#     - PUFPUF/*.csv             Puffinus puffinus
+#     - PUFYEL/*.csv             Puffinus yelkouan (read only if the folder
+#                                exists)
 #
 #   Output (folder 'data/', NOT uploaded to GitHub):
 #     - data/All_positions.csv   one row per position: geo_trip, Date_Time, lon, lat
@@ -30,8 +31,16 @@
 pacman::p_load('tidyverse', 'lubridate', 'sf', 'rnaturalearth',
                'rnaturalearthdata')
 
-# Folder with the original files
+# Folders with the original files
 raw_dir <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/05_Algorithm_test/Seabird_tracks'
+cal_dir <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/Results/SGAT/Raw_trips'
+
+# Calonectris positions with colony anchoring ('_cdays' files: positions on
+# colony days fixed at or near the colony) or without it (FALSE)
+colony_anchoring <- TRUE
+
+# Tracks excluded from the analysis (and reason)
+exclude_tracks <- c('CJ636001')   # HYDCAS, Egg Island: not used in the paper
 
 out_dir   <- 'data'
 check_dir <- file.path(out_dir, 'checks')
@@ -56,19 +65,29 @@ species_names <- tribble(
 # All sources are converted to the same columns:
 #   geo_trip, Ring, Sp, Colony, Date_Time (UTC), lon, lat, source
 
-# --- 2.1. Calonectris (RData) ---------------------------------------------------
+# --- 2.1. Calonectris (SGAT csv) ---------------------------------------------
 cal_env <- new.env()
-load(file.path(raw_dir, 'clean_tracks.RData'), envir = cal_env)
+load(file.path(raw_dir, 'subset_CALtracks_WAclassified.RData'), envir = cal_env)
+cal_ids <- unique(as.character(cal_env$WAs_ids$geo_trip))
 
-cal_info <- cal_env$seg_all %>%
-  distinct(geo_trip, Ring, Sp, Colony) %>%
-  mutate(geo_trip = as.character(geo_trip), Ring = as.character(Ring))
+suffix <- ifelse(colony_anchoring, '_rawpoints_cdays.csv', '_rawpoints.csv')
+cal_files <- list.files(cal_dir, pattern = paste0(suffix, '$'), full.names = TRUE)
+cal_files <- cal_files[str_extract(basename(cal_files), '^[^_]+') %in% cal_ids]
 
-cal <- cal_env$trips.class_all %>%
-  transmute(geo_trip = as.character(ID), Date_Time = DateTime,
-            lon = Longitude, lat = Latitude) %>%
-  left_join(cal_info, by = 'geo_trip') %>%
-  mutate(source = 'clean_tracks.RData')
+missing_cal <- setdiff(cal_ids, str_extract(basename(cal_files), '^[^_]+'))
+if (length(missing_cal) > 0) {
+  warning('Calonectris tracks not found: ', paste(missing_cal, collapse = ', '))
+}
+
+read_sgat_csv <- function(f) {
+  read_csv(f, show_col_types = FALSE,
+           col_types = cols(Ring = 'c', geoID = 'c', geo_trip = 'c',
+                            Date_Time = 'c')) %>%
+    transmute(geo_trip = coalesce(geo_trip, geoID), Ring, Sp = Species,
+              Colony, Date_Time = ymd_hms(Date_Time, tz = 'UTC'),
+              lon, lat, source = basename(f))
+}
+cal <- map_dfr(cal_files, read_sgat_csv)
 
 # --- 2.2. Hydrobates (SGAT csv; ';' separator and ',' decimals) ---------------
 hyd_files <- list.files(file.path(raw_dir, 'Hydrobates'), pattern = '\\.csv$',
@@ -84,35 +103,16 @@ hyd <- map_dfr(hyd_files, function(f) {
               lon, lat, source = basename(f))
 })
 
-# --- 2.3. Puffinus puffinus (SGAT csv) ---------------------------------------
-puf_files <- list.files(file.path(raw_dir, 'PUFPUF'), pattern = '\\.csv$',
-                        full.names = TRUE)
-puf <- map_dfr(puf_files, function(f) {
-  read_csv(f, show_col_types = FALSE,
-           col_types = cols(Ring = 'c', geoID = 'c', geo_trip = 'c',
-                            Date_Time = 'c')) %>%
-    transmute(geo_trip, Ring, Sp = Species, Colony,
-              Date_Time = ymd_hms(Date_Time, tz = 'UTC'),
-              lon, lat, source = basename(f))
-})
-
-# --- 2.4. Puffinus yelkouan (IntiProc .trj) ----------------------------------
-# Columns used: 1 = noon/midnight, 2 = date (dd/mm/yyyy), 3 = time,
-# 7 = latitude, 9 = longitude. Latitudes of +/-90 are failed estimates.
-yel_files <- list.files(raw_dir, pattern = '_PUFYEL_.*\\.trj$', full.names = TRUE)
-yel <- map_dfr(yel_files, function(f) {
-  read_csv(f, skip = 1, col_names = FALSE, show_col_types = FALSE) %>%
-    transmute(geo_trip = str_extract(basename(f), '^[^_]+'),
-              Ring = NA_character_, Sp = 'PUFYEL',
-              Colony = str_remove(str_split_i(basename(f), '_', 4), 'driftadj'),
-              Date_Time = parse_date_time(paste(X2, X3), c('dmy HMS', 'dmy HM'),
-                                          tz = 'UTC'),
-              lat = X7, lon = X9, source = basename(f)) %>%
-    filter(abs(lat) < 90)
-})
+# --- 2.3. Puffinus puffinus and P. yelkouan (SGAT csv) -------------------
+puf_files <- c(list.files(file.path(raw_dir, 'PUFPUF'), pattern = '\\.csv$',
+                          full.names = TRUE),
+               list.files(file.path(raw_dir, 'PUFYEL'), pattern = '\\.csv$',
+                          full.names = TRUE))
+puf <- map_dfr(puf_files, read_sgat_csv)
 
 # --- 2.5. Join all -------------------------------------------------------------
-all_pos <- bind_rows(cal, hyd, puf, yel) %>%
+all_pos <- bind_rows(cal, hyd, puf) %>%
+  filter(!geo_trip %in% exclude_tracks) %>%
   mutate(Colony = recode(Colony, 'M.Clara' = 'MClara')) %>%
   filter(!is.na(lon), !is.na(lat), !is.na(Date_Time)) %>%
   distinct(geo_trip, Date_Time, .keep_all = TRUE) %>%
