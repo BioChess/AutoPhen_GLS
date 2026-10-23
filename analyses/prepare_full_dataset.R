@@ -43,6 +43,17 @@ cal_ids_file <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analy
 # Main analysis: without anchoring (FALSE), as for the other species.
 colony_anchoring <- FALSE
 
+# Start and end of the tracks: the logger is deployed and recovered at the
+# colony, so the first and last 'fix_ends_n' positions are set to the colony
+# coordinates (the same rule used in the SGAT script). For incomplete tracks
+# (e.g. logger failure before the return to the colony) only the start is
+# fixed.
+fix_ends_n <- 2
+incomplete_tracks <- c('1605002002', '1644003001', '1644003002', '19084002001',
+                       'BR50281001001', 'BR50284001001', 'J459002001',
+                       'X238001001')   # Calonectris (from the '_cdays' files)
+# ADD incomplete tracks of the other species here
+
 # Tracks excluded from the analysis (and reason)
 exclude_tracks <- c('CJ636001',    # HYDCAS, Egg Island: not used in the paper
                     'BR928001001') # CALEDW, Montana Clara: not used in the paper
@@ -188,10 +199,14 @@ dist_km <- function(lon1, lat1, lon2, lat2) {
                      cos(lat1 * rad) * cos(lat2 * rad) * cos((lon2 - lon1) * rad)))
 }
 
+# Positions 3-12 from each end (the first/last 'fix_ends_n' are fixed at the
+# colony in section 6): large distances suggest incomplete tracks
 ends <- all_pos %>%
   group_by(geo_trip) %>%
-  summarise(lon_first = median(head(lon, 10)), lat_first = median(head(lat, 10)),
-            lon_last  = median(tail(lon, 10)), lat_last  = median(tail(lat, 10)),
+  summarise(lon_first = median(head(lon, 10 + fix_ends_n)[-seq_len(fix_ends_n)]),
+            lat_first = median(head(lat, 10 + fix_ends_n)[-seq_len(fix_ends_n)]),
+            lon_last  = median(head(tail(lon, 10 + fix_ends_n), 10)),
+            lat_last  = median(head(tail(lat, 10 + fix_ends_n), 10)),
             max_gap_days = round(max(as.numeric(diff(Date_Time), units = 'days')), 1),
             .groups = 'drop')
 
@@ -212,10 +227,12 @@ write_csv(sample_size, file.path(check_dir, 'sample_size.csv'))
 # Short tracks, long gaps, or tracks that do not start/end near the colony
 # (median of the first/last 10 positions; GLS error is about 200 km).
 to_check <- metadata %>%
+  mutate(incomplete = geo_trip %in% incomplete_tracks) %>%
   filter(duration_days < 240 | max_gap_days > 5 |
            start_dist_km > 1000 | end_dist_km > 1000 | is.na(Colony.lat)) %>%
-  dplyr::select(geo_trip, Sp, Colony, n_positions, start_date, end_date,
-                duration_days, max_gap_days, start_dist_km, end_dist_km)
+  dplyr::select(geo_trip, Sp, Colony, incomplete, n_positions, start_date,
+                end_date, duration_days, max_gap_days, start_dist_km,
+                end_dist_km)
 print(to_check, n = Inf)
 write_csv(to_check, file.path(check_dir, 'tracks_to_check.csv'))
 
@@ -239,6 +256,20 @@ ggsave(file.path(check_dir, 'map_all_tracks.png'), map_all,
 # =============================================================================
 # 6. SAVE ----
 # =============================================================================
+
+# --- 6.1. First and last positions at the colony -------------------------------
+all_pos <- all_pos %>%
+  left_join(colonies %>% dplyr::select(Colony, Colony.lat, Colony.lon),
+            by = 'Colony') %>%
+  group_by(geo_trip) %>%
+  mutate(k = row_number(), n = n(),
+         at_colony = k <= fix_ends_n |
+           (k > n - fix_ends_n & !geo_trip %in% incomplete_tracks),
+         lon = ifelse(at_colony & !is.na(Colony.lon), Colony.lon, lon),
+         lat = ifelse(at_colony & !is.na(Colony.lat), Colony.lat, lat)) %>%
+  ungroup()
+metadata <- metadata %>%
+  mutate(incomplete = geo_trip %in% incomplete_tracks)
 
 write_csv(all_pos %>% dplyr::select(geo_trip, Date_Time, lon, lat),
           file.path(out_dir, 'All_positions.csv'))
