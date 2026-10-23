@@ -36,11 +36,13 @@ raw_dir <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/0
 cal_dir <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/Results/SGAT/Raw_trips'
 
 # Calonectris positions with colony anchoring ('_cdays' files: positions on
-# colony days fixed at or near the colony) or without it (FALSE)
-colony_anchoring <- TRUE
+# colony days fixed at or near the colony) or without it ('_rawpoints' files).
+# Main analysis: without anchoring (FALSE), as for the other species.
+colony_anchoring <- FALSE
 
 # Tracks excluded from the analysis (and reason)
-exclude_tracks <- c('CJ636001')   # HYDCAS, Egg Island: not used in the paper
+exclude_tracks <- c('CJ636001',    # HYDCAS, Egg Island: not used in the paper
+                    'BR928001001') # CALEDW, Montana Clara: not used in the paper
 
 out_dir   <- 'data'
 check_dir <- file.path(out_dir, 'checks')
@@ -137,7 +139,13 @@ if (!file.exists(colonies_file)) {
   message('Template created: ', colonies_file,
           '. Fill the coordinates and run the script again.')
 }
-colonies <- read_csv(colonies_file, show_col_types = FALSE)
+# The file can be saved with ',' or ';' as separator (e.g. Excel in Spanish)
+first_line <- readLines(colonies_file, n = 1)
+colonies <- if (grepl(';', first_line)) {
+  read_csv2(colonies_file, show_col_types = FALSE)
+} else {
+  read_csv(colonies_file, show_col_types = FALSE)
+}
 
 missing_col <- setdiff(unique(all_pos$Colony),
                        colonies$Colony[!is.na(colonies$Colony.lat)])
