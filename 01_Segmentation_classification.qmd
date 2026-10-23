@@ -20,7 +20,7 @@ execute:
 Every time we do not need to install and load packages from GitHub or other external repository, we use `pacman` function. For the following code, we need two main packages `adehabitatHR` and `segclust2d` packages
 
 ```{r}
-pacman::p_load('tidyverse', 'plyr', 'lubridate', 'readxl', 'readr', # data carpenter
+pacman::p_load('tidyverse', 'lubridate', 'readxl', 'readr', # data carpenter (plyr is used with plyr:: only, to avoid masking dplyr)
                'sf', 'spData', # spatial data
                'adehabitatLT', 'adehabitatHR',  # trajectories and kernels
                'segclust2d', # spatial segmentation and clustering
@@ -103,17 +103,29 @@ Segmentation and clustering by segclust2d package requires:
 
 - **Avoid low variance** segments
 
-Additionally, if we are managing GLS data, we have to ensure **first position is at the colony**. In that way, we use Net Squared Colony Distance (NSCD) instead of Net Squared Distance (NSD).
+Positions are projected to an **azimuthal equidistant projection centred on the colony**, in km. In this way, distances, trajectory metrics and thresholds have the same meaning at any latitude, and the colony is at (0, 0). The Net Squared Colony Distance (NSCD, column `R2n`) is then the squared distance to the colony (km²).
 
-##### Convert to trajectory class
+##### Project positions and convert to trajectory class
 
 ```{r}
-# Trajectory format 
-# R2n	= the squared net displacement between the current relocation and the first relocation of the trajectory (NSD)
-ltraj <- as.ltraj(xy = as.matrix(track[,c('lon','lat')]),
+# Azimuthal equidistant projection centred on the colony (units: km)
+proj_colony <- paste0('+proj=aeqd +lat_0=', col.lat, ' +lon_0=', col.lon,
+                      ' +units=km +datum=WGS84')
+xy_km <- sf::sf_project(from = sf::st_crs(4326), to = proj_colony,
+                        pts = as.matrix(track[, c('lon', 'lat')]))
+
+# Trajectory format (adehabitatLT): x, y in km, plus step metrics
+ltraj <- as.ltraj(xy = xy_km,
                   date = track$Date_Time,
                   id = track$geo_trip)
 track_df <- ltraj[[1]]
+
+# Keep longitude and latitude, and compute NSCD from the colony (km^2)
+pos <- match(track_df$date, track$Date_Time)
+track_df <- track_df %>%
+  mutate(lon = track$lon[pos],
+         lat = track$lat[pos],
+         R2n = x^2 + y^2)
 ```
 
 Transforming into ltraj object, we can get two things at once: (1) x and y columns as coordinates of the track and (b) several movement metrics can be useful for segmentation, clustering and classification of the segments.
@@ -144,8 +156,7 @@ track_df3 <- remove_duplicates(data = track_df2, equinox_days = eq_window_days,
                               # cdays = cdays,
                               Sep_eq = Sep_eq, Mar_eq = Mar_eq,
                               dup_threshold = adv$max_repeated,
-                              edge_positions = adv$edge_positions,
-                              col.lon = col.lon, col.lat = col.lat)
+                              edge_positions = adv$edge_positions)
 ```
 
 ### 4.3. Segmentation and clustering
@@ -261,6 +272,10 @@ track_df5 <- track_df4 %>%
     Breed == "mig" & rev(cumsum(rev(replace_na(Breed == "W", FALSE)))) > 0 ~ "mig1", 
     TRUE ~ Breed
   )) %>%
+  # Output: x and y in longitude/latitude (used by scripts 02 and 03);
+  # projected coordinates (km) kept as x_km and y_km
+  mutate(x_km = x, y_km = y, x = lon, y = lat) %>%
+  dplyr::select(-lon, -lat) %>%
   mutate(Equinox = ifelse(
     date >= (as.Date(Sep_eq) - days(eq_window_days)) & 
       date <= (as.Date(Sep_eq) + days(eq_window_days)), 'Sep',
@@ -279,7 +294,7 @@ We can plot the results of the procedure in different ways thanks to `plot_segme
 ```{r}
 plot_list <- plot_segmentation(segclust = segclust_plot, map = map_seg, 
                                segclass = segments3, 
-                               col.lon = col.lon, col.lat = col.lat,
+                               col.lon = 0, col.lat = 0, # colony in km
                                breed = T, data = track_df5,
                                world = world)
 

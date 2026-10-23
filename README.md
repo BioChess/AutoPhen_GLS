@@ -41,9 +41,10 @@ This repository is currently being updated. The version used for the submitted m
 ```
 AutoPhen_GLS/
 ├── 00_setup.R                          Install packages
-├── 01_Segmentation_classification.qmd  Step 1: segmentation, clustering and classification
+├── parameters.R                        All parameters of the workflow
+├── 01_Segmentation_classification      Step 1: segmentation, clustering and classification (.R and .qmd)
 ├── 02_Supervised_reclassification.R    Step 2 (optional): interactive reclassification
-├── 03_Phenology_dates.qmd              Step 3: breeding/wintering areas and phenological dates
+├── 03_Phenology_dates                  Step 3: breeding/wintering areas and phenological dates (.R and .qmd)
 ├── functions/                          Functions used in steps 1-3
 ├── input/                              Example positions and metadata
 ├── output/                             Results
@@ -62,6 +63,11 @@ AutoPhen_GLS/
 | 1 | `01_Segmentation_classification` | Segmentation and clustering of the track (`segclust2d`), classification of segments into Breeding / Migration / Wintering, flags for segments that need review | `input/GLS_positions_example.csv`, `input/GLS_metadata_example.csv` | `output/Phenology_tracks.csv`, `output/Segmentation_results.csv` |
 | 2 | `02_Supervised_reclassification` | *Optional.* Interactive map to review and correct flagged segments or positions | Outputs of step 1 | `output/*_corrected.csv` |
 | 3 | `03_Phenology_dates` | Breeding and wintering areas as 90% KDE and extraction of phenological dates | Outputs of step 1 or 2 | `output/Phenology.csv` |
+
+Steps 1 and 3 have two versions:
+
+- **`.R`**: runs the step for **all tracks** in a loop. Use it to analyse your data. If a track fails, the error is reported and the loop continues (failed tracks are saved in `output/Failed_tracks_*.csv`). Optionally, a map of each track is saved in `output/plots/`.
+- **`.qmd`** (Quarto): the same steps explained **one by one for one track**. Use it to understand the method or to check a single track.
 
 Functions:
 
@@ -102,7 +108,7 @@ If you find a problem with a new R version, please open an [issue](https://githu
 The folder `input/` contains positions of seven Cory's shearwater (*Calonectris borealis*) tracks (Veneguera, Gran Canaria, 2002–2003), estimated from GLS data.
 
 1. Run `00_setup.R` (only once).
-2. Run `01_Segmentation_classification`, then (optionally) `02_Supervised_reclassification`, then `03_Phenology_dates`.
+2. Run `01_Segmentation_classification.R`, then (optionally) `02_Supervised_reclassification.R`, then `03_Phenology_dates.R`.
 3. Results are written to `output/`.
 
 ---

@@ -24,7 +24,9 @@ clean_positions <- function (data = df_trip, dist_threshold = 40){
     x1 <- data[-1, ]
     x2 <- data[-nrow(data), ]
     data$dist <- c(sqrt((x1$x - x2$x)^2 + (x1$y - x2$y)^2), NA)
-    data$R2n <- (data$x - data$x[1])^2 + (data$y - data$y[1])^2
+    # Coordinates are projected and centred on the colony (0, 0), so the
+    # net squared colony distance (NSCD) is x^2 + y^2 (km^2)
+    data$R2n <- data$x^2 + data$y^2
     data$dt <- c(unclass(x1$date) - unclass(x2$date), NA)
     data$dx <- c(x1$x - x2$x, NA)
     data$dy <- c(x1$y - x2$y, NA)
@@ -40,11 +42,13 @@ clean_positions <- function (data = df_trip, dist_threshold = 40){
 
 remove_duplicates <- function(data, equinox_days = 20, 
                               Sep_eq = Sep_eq, Mar_eq = Mar_eq, dup_threshold = 4,
-                              edge_positions = 5, col.lon, col.lat,
-                              cdays = NULL){
+                              edge_positions = 5, cdays = NULL){
+  # Repeated values are checked on latitude ('lat', in degrees), because GLS
+  # modelling can produce identical latitudes. 'x' and 'y' are projected
+  # coordinates (km) centred on the colony.
   
-  if(!'y' %in% names(data)){
-    stop('Columns format must be ltraj names \n')
+  if(!all(c('y', 'lat') %in% names(data))){
+    stop('Data must have ltraj columns (x, y) and latitude (lat) \n')
   }
   n <- nrow(data)
   
@@ -61,7 +65,7 @@ remove_duplicates <- function(data, equinox_days = 20,
     
   }
   # Remove equinox positions when there is no latitudinal movement
-  if(length(unique(data$y[data$Equinox == 'Sep'])) == 1){
+  if(length(unique(data$lat[data$Equinox == 'Sep'])) == 1){
     data <- data %>%
       filter(Equinox != 'Sep' | date == date[.$Equinox == 'Sep'][1] |
                date == date[.$Equinox == 'Sep'][length(data$date[data$Equinox == 'Sep'])] )
@@ -70,32 +74,32 @@ remove_duplicates <- function(data, equinox_days = 20,
     
   }
   
-  if(length(unique(data$y[data$Equinox == 'Mar'])) == 1){
+  if(length(unique(data$lat[data$Equinox == 'Mar'])) == 1){
     data <- data %>%
       filter(Equinox != 'Mar' | date == date[.$Equinox == 'Mar'][1] |
                date == date[.$Equinox == 'Mar'][length(data$date[data$Equinox == 'Mar'])] )
     cat('March equinox positions without latitudinal movement has been removed \n')
   }
   
-  if(sum(duplicated(data$y)) > dup_threshold){
+  if(sum(duplicated(data$lat)) > dup_threshold){
     data <- data %>%
-      distinct(y, .keep_all = T)
+      distinct(lat, .keep_all = T)
     cat('Other duplicated latitudes has been removed \n')
   }
   
-  if(any(duplicated(tail(data$y, edge_positions)))){
+  if(any(duplicated(tail(data$lat, edge_positions)))){
     data <- data[1:(nrow(data) - edge_positions),]
-  } else if (any(duplicated(head(data$y, edge_positions)))){
+  } else if (any(duplicated(head(data$lat, edge_positions)))){
     data <- data[edge_positions:nrow(data),]
   }
   
   if(nrow(data) == n){
     cat('No duplicates found \n')
-  } else {
-    # Correct R2n values, according to the real distance to the colony
-    data <- data %>%
-      mutate(R2n = (x - col.lon)^2 + (y - col.lat)^2)
   }
+  
+  # NSCD: squared distance to the colony (km^2); the colony is at (0, 0)
+  data <- data %>%
+    mutate(R2n = x^2 + y^2)
   
   return(data)
 }
@@ -129,7 +133,15 @@ trajmetrics <- function(trj){
     
     # Straightness and sinuosity
     stght <- trajr::TrajStraightness(trj_r)
-    snsty <- trajr::TrajSinuosity2(trj_r)
+    # Sinuosity (Benhamou 2004) has units of 1/sqrt(length), so its value
+    # depends on the units and on the step length. We multiply it by the
+    # square root of the mean step length of the rediscretised trajectory to
+    # obtain a dimensionless index that depends only on the turning angles
+    # (and on the variation of step lengths). With constant step length:
+    #   sinuosity = 2 / sqrt((1 + c) / (1 - c)), c = mean cosine of turning angles
+    # sinuosity = 1 when c = 0.6; higher values = more tortuous paths.
+    snsty <- trajr::TrajSinuosity2(trj_r) *
+      sqrt(mean(trajr::TrajStepLengths(trj_r)))
     
     # Directional change (cannot be calculated in trj_r)
     dc <- mean(TrajDirectionalChange(trj))
@@ -171,6 +183,13 @@ R2n_limit <- function(x = track, plot = F, Kmax = 3, lmin = 5, ncluster = 3){
   if (!is.logical(plot) || length(plot) != 1) {
     stop("'plot' must be a logical value (TRUE or FALSE).")
   }
+  
+  # Consecutive (nearly) identical NSCD values (e.g. positions fixed at the
+  # same distance from the colony) stop segclust2d. Only the first position
+  # of each run is kept (change in distance to the colony < 0.5 km). This does
+  # not change the distance values used for the threshold.
+  d_col <- sqrt(x$R2n)
+  x <- x[c(TRUE, abs(diff(d_col)) >= 0.5), ]
   
   out <- tryCatch({
     suppressWarnings({
@@ -444,6 +463,9 @@ equinox_interference <- function(df_seg = segments1, track = df_trip2,
 ################################################################################
 
 segment_correction <- function(df_seg = segments2, adv){
+  # Missing metrics (NA) must not change the class: conditions with NA are
+  # treated as FALSE (no correction)
+  ok <- function(cond) dplyr::coalesce(cond, FALSE)
   
   median_sq_disp <- median(df_seg$sq_disp, na.rm = T)
   mean_R2n_mean <- mean(df_seg$R2n_mean, na.rm = T)
@@ -465,17 +487,17 @@ segment_correction <- function(df_seg = segments2, adv){
   
   # Wintering area classified as breeding area
   segs4 <- df_seg %>%
-    dplyr::mutate(Breed = ifelse(Breed == 'B' & R2n_mean > mean_R2n_mean &
-                                   straightness < adv$corr_straightness, 'W', Breed))
+    dplyr::mutate(Breed = ifelse(ok(Breed == 'B' & R2n_mean > mean_R2n_mean &
+                                   straightness < adv$corr_straightness), 'W', Breed))
   
   # Migrating area classified as breeding area
   segs5 <- segs4 %>%
     mutate(
-      Breed = ifelse(Breed == 'B' & Confidence < adv$corr_score & 
+      Breed = ifelse(ok(Breed == 'B' & Confidence < adv$corr_score & 
                        (lead(Breed) == 'mig' | lag(Breed) == 'mig') &
-                       straightness > adv$corr_straightness, 
+                       straightness > adv$corr_straightness), 
                      case_when(
-                       sq_disp > median_sq_disp ~ 'mig',
+                       ok(sq_disp > median_sq_disp) ~ 'mig',
                        is.nan(sq_disp) ~ Breed,
                        TRUE ~ Breed
                      ), 
@@ -483,13 +505,13 @@ segment_correction <- function(df_seg = segments2, adv){
     )
   # Breeding area classified as wintering area
   segs6 <- segs5 %>%
-    dplyr::mutate(Breed = ifelse(Breed == 'W' & R2n_mean < mean_R2n_mean , 'B', Breed))
+    dplyr::mutate(Breed = ifelse(ok(Breed == 'W' & R2n_mean < mean_R2n_mean), 'B', Breed))
   
   # Migrating area classified as wintering area
   segs7 <- segs6 %>%
-    dplyr::mutate(Breed = ifelse(Breed == 'W' & sq_disp > median_sq_disp & 
+    dplyr::mutate(Breed = ifelse(ok(Breed == 'W' & sq_disp > median_sq_disp & 
                                    sinuosity < adv$corr_sinuosity &
-                                   straightness > adv$corr_straightness, 'mig', Breed))
+                                   straightness > adv$corr_straightness), 'mig', Breed))
   
   # Impsible situations
   out <- segs7 %>%
@@ -501,9 +523,9 @@ segment_correction <- function(df_seg = segments2, adv){
       )
     ) %>%
     mutate(
-      Breed = ifelse(row_number() != 1 & row_number() != nrow(.) &
+      Breed = ifelse(ok(row_number() != 1 & row_number() != nrow(.) &
                              Breed == 'B' & lead(Breed) == 'mig' &
-                             lag(Breed) == 'mig','W', Breed)) %>%
+                             lag(Breed) == 'mig'),'W', Breed)) %>%
     mutate(
       Breed_0 = df_seg$Breed
     ) %>%
@@ -645,7 +667,130 @@ plot_segmentation <- function(segclust = NULL, map = NULL,
     breed_plot <- NULL
   }
 
-  plot_list <- list(segclust = segclust_plot, map = map_seg, segclass = segclass_plot, breed = breed_plot)
+  plot_list <- list(segclust = segclust, map = map, segclass = segclass_plot, breed = breed_plot)
   return(plot_list)
 }
 
+
+
+################################################################################
+# classify_track(): full step 1 for ONE track
+################################################################################
+# Runs, for one track, the same steps shown in 01_Segmentation_classification.qmd:
+# projection, cleaning, segmentation/clustering, classification of segments,
+# equinox flags, corrections and classification of each position.
+#
+# Arguments:
+#   track  data frame with columns Date_Time (POSIXct, UTC), lon, lat
+#   info   one row of the metadata (geo_trip, Ring, Sp, Colony, Colony.lon,
+#          Colony.lat)
+#   Kmax, lmin, ncluster, eq_window_days, adv   parameters (parameters.R)
+#   make_plots  TRUE to return the maps of the segmentation
+#
+# Returns a list with: segments (one row per segment), summary (one row per
+# track), track (one row per position) and plot (or NULL).
+
+classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
+                           adv, make_plots = FALSE) {
+
+  geo_trip <- info$geo_trip
+  col.lon  <- info$Colony.lon
+  col.lat  <- info$Colony.lat
+  track    <- track %>% arrange(Date_Time)
+
+  start_year <- year(track$Date_Time[1])
+  end_year   <- year(track$Date_Time[nrow(track)])
+
+  # --- Projection centred on the colony (km) and trajectory -----------------
+  proj_colony <- paste0('+proj=aeqd +lat_0=', col.lat, ' +lon_0=', col.lon,
+                        ' +units=km +datum=WGS84')
+  xy_km <- sf::sf_project(from = sf::st_crs(4326), to = proj_colony,
+                          pts = as.matrix(track[, c('lon', 'lat')]))
+  ltraj <- adehabitatLT::as.ltraj(xy = xy_km, date = track$Date_Time,
+                                  id = geo_trip)
+  track_df <- ltraj[[1]]
+  pos <- match(track_df$date, track$Date_Time)
+  track_df <- track_df %>%
+    mutate(lon = track$lon[pos], lat = track$lat[pos], R2n = x^2 + y^2)
+
+  # --- Equinoxes -------------------------------------------------------------
+  Sep_eq <- as.Date(paste0(start_year, '-09-21'))
+  Mar_eq <- as.Date(paste0(end_year, '-03-21'))
+
+  # --- Cleaning --------------------------------------------------------------
+  track_df2 <- clean_positions(data = track_df, dist_threshold = adv$max_step)
+  track_df3 <- remove_duplicates(data = track_df2, equinox_days = eq_window_days,
+                                 Sep_eq = Sep_eq, Mar_eq = Mar_eq,
+                                 dup_threshold = adv$max_repeated,
+                                 edge_positions = adv$edge_positions)
+
+  # --- Segmentation and clustering -------------------------------------------
+  mode_segclust <- segclust(track_df3,
+                            Kmax = Kmax, lmin = lmin, ncluster = ncluster,
+                            seg.var = c('x', 'y'), order.var = 'x',
+                            diag.var = c('dx', 'dy', 'R2n', 'x', 'y', 'dist'),
+                            subsample = FALSE)
+  bic_max <- BIC(mode_segclust) %>% filter(BIC == max(BIC))
+
+  # --- Classification of segments --------------------------------------------
+  add.metrics <- c(names(adv$paired_metrics), adv$extra_metrics)
+  segments1 <- segment_class(mode_segclust = mode_segclust, option.by = 'seg',
+                             add.metrics = add.metrics,
+                             col.lon = col.lon, col.lat = col.lat,
+                             adv = adv, lmin = lmin)
+  segments2 <- equinox_interference(df_seg = segments1$df_clust,
+                                    track = track_df3, Sep_eq, Mar_eq,
+                                    equinox_days = eq_window_days,
+                                    score_factor = adv$eq_score_factor)
+  segments3 <- segment_correction(df_seg = segments2, adv = adv) %>%
+    mutate(Check = case_when(
+      Confidence < adv$check_score ~ 'Check',
+      Confidence >= adv$check_score & Eq & !(row_number() %in% c(1, n())) &
+        (lag(Breed) != Breed | lead(Breed) != Breed) ~ 'Check',
+      TRUE ~ 'Ok'))
+  segments3 <- cbind(ID = geo_trip, Sp = info$Sp, segments3)
+
+  seg_df <- data.frame(Ring = info$Ring, Sp = info$Sp, Colony = info$Colony,
+                       ID = geo_trip,
+                       n_seg = bic_max$nseg, n_cluster = bic_max$ncluster,
+                       Breed_class = paste(segments3$Breed, collapse = '-'),
+                       n_seg_B = sum(segments3$Breed == 'B', na.rm = TRUE),
+                       n_seg_mig = sum(segments3$Breed == 'mig', na.rm = TRUE),
+                       n_seg_W = sum(segments3$Breed == 'W', na.rm = TRUE),
+                       Confidence_0 = mean(segments2$Confidence, na.rm = TRUE)/3,
+                       Confidence = mean(segments3$Confidence, na.rm = TRUE)/3,
+                       Metrics = paste(segments1$metrics, collapse = '-'))
+
+  # --- Class of each position ------------------------------------------------
+  track_df5 <- segclust2d::augment(mode_segclust) %>%
+    mutate(Breed = segments3$Breed[findInterval(row_number(), segments3$begin)]) %>%
+    distinct() %>%
+    add_column(ID = geo_trip, .before = 1) %>%
+    mutate(Breed2 = case_when(
+      Breed == 'mig' & cumsum(replace_na(Breed == 'W', FALSE)) > 0 &
+        rev(cumsum(rev(replace_na(Breed == "W", FALSE)))) == 0 ~ 'mig2',
+      Breed == "mig" & rev(cumsum(rev(replace_na(Breed == "W", FALSE)))) > 0 ~ "mig1",
+      TRUE ~ Breed)) %>%
+    mutate(x_km = x, y_km = y, x = lon, y = lat) %>%
+    dplyr::select(-lon, -lat) %>%
+    mutate(Equinox = case_when(
+      date >= (Sep_eq - days(eq_window_days)) &
+        date <= (Sep_eq + days(eq_window_days)) ~ 'Sep',
+      date >= (Mar_eq - days(eq_window_days)) &
+        date <= (Mar_eq + days(eq_window_days)) ~ 'Mar',
+      TRUE ~ 'No'))
+
+  # --- Optional plots ----------------------------------------------------------
+  plot_out <- NULL
+  if (make_plots) {
+    map_seg <- segmap(mode_segclust, pointsize = 3, coord.names = c("x", "y"),
+                      interactive = FALSE)
+    plot_list <- plot_segmentation(segclust = NULL, map = map_seg,
+                                   segclass = NULL, col.lon = 0, col.lat = 0,
+                                   breed = TRUE, data = track_df5, world = NULL)
+    plot_out <- plot_list$map | plot_list$breed
+  }
+
+  list(segments = segments3, summary = seg_df, track = track_df5,
+       plot = plot_out)
+}
