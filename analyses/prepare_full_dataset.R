@@ -6,8 +6,8 @@
 #              the two input files of the workflow, and runs basic checks.
 #
 #   Sources (all of them SGAT positions):
-#     - Calonectris spp.: tracks listed in WAs_ids
-#       (subset_CALtracks_WAclassified.RData), read from 'cal_dir'
+#     - Calonectris spp.: the 124 tracks used in the submitted paper (IDs
+#       from CAL_subset_phenology_tracks_v9.5.csv), read from 'cal_dir'
 #       (<geo_trip>_<year>_<Sp>_<Colony>_rawpoints[_cdays].csv)
 #     - Hydrobates/*.csv         Hydrobates spp. (';' separator, ',' decimals)
 #     - PUFPUF/*.csv             Puffinus puffinus
@@ -34,6 +34,9 @@ pacman::p_load('tidyverse', 'lubridate', 'sf', 'rnaturalearth',
 # Folders with the original files
 raw_dir <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/05_Algorithm_test/Seabird_tracks'
 cal_dir <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/Results/SGAT/Raw_trips'
+# File with the Calonectris tracks used in the submitted paper (only the IDs
+# are used)
+cal_ids_file <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/Results/Phenology/Algorithm/CAL_subset_phenology_tracks_v9.5.csv'
 
 # Calonectris positions with colony anchoring ('_cdays' files: positions on
 # colony days fixed at or near the colony) or without it ('_rawpoints' files).
@@ -68,9 +71,9 @@ species_names <- tribble(
 #   geo_trip, Ring, Sp, Colony, Date_Time (UTC), lon, lat, source
 
 # --- 2.1. Calonectris (SGAT csv) ---------------------------------------------
-cal_env <- new.env()
-load(file.path(raw_dir, 'subset_CALtracks_WAclassified.RData'), envir = cal_env)
-cal_ids <- unique(as.character(cal_env$WAs_ids$geo_trip))
+cal_ids <- read_csv(cal_ids_file, col_select = 'ID', show_col_types = FALSE,
+                    col_types = cols(ID = 'c')) %>%
+  distinct(ID) %>% pull(ID)
 
 suffix <- ifelse(colony_anchoring, '_rawpoints_cdays.csv', '_rawpoints.csv')
 cal_files <- list.files(cal_dir, pattern = paste0(suffix, '$'), full.names = TRUE)
