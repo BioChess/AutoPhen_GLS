@@ -1,2 +1,8 @@
-"","Ring","Sp","Colony","ID","n_seg","n_cluster","Breed_class","n_seg_B","n_seg_mig","n_seg_W","Confidence_0","Confidence","Metrics"
-"1","GX19241","ICHAUD","SanPedro","GX19241_2021",15,10,"B-mig-W-W-W-W-mig-W-mig-W-mig-mig-mig-B-B",3,6,6,0.888888888888889,0.888888888888889,"R2n_sd-straightness-sinuosity-ang_vector"
+Ring,Sp,Colony,ID,n_seg,n_cluster,Breed_class,n_seg_B,n_seg_mig,n_seg_W,Confidence_0,Confidence,Metrics,run_time_s
+6134564,CALBOR,Veneguera,11001001,15,10,B-B-B-B-B-B-B-B-mig-mig-W-mig-mig-mig-B,9,5,1,0.8222222222222223,0.8222222222222223,mu.dist-straightness-sinuosity-ang_vector,50
+6134563,CALBOR,Veneguera,12001001,14,10,B-B-B-B-mig-mig-W-W-W-mig-mig-B-B-B,7,4,3,0.8809523809523809,0.8809523809523809,dc_sd-straightness-sinuosity-ang_vector,42
+6134549,CALBOR,Veneguera,19001001,13,10,B-B-B-B-B-B-B-mig-W-W-mig-mig-B,8,3,2,0.7435897435897436,0.7435897435897436,Emax-straightness-sinuosity-ang_vector,44
+6134565,CALBOR,Veneguera,33001001,14,10,B-B-B-B-B-B-B-mig-mig-W-mig-W-W-mig,7,4,3,0.8333333333333334,0.9761904761904762,mu.dist-straightness-sinuosity-ang_vector,29
+6134544,CALBOR,Veneguera,41001001,15,10,B-B-B-B-B-mig-mig-mig-W-W-mig-mig-B-B-B,8,5,2,0.7777777777777778,0.7777777777777778,Emax-straightness-sinuosity-ang_vector,63
+6134548,CALBOR,Veneguera,42002001,11,9,B-B-B-B-B-W-W-mig-B-B-B,8,1,2,0.9393939393939394,0.9393939393939394,mu.dist-straightness-sinuosity-ang_vector,51
+6134566,CALBOR,Veneguera,47001001,13,10,B-B-B-B-B-B-B-B-B-mig-mig-W-W,9,2,2,0.8974358974358975,0.8974358974358975,mu.dist-straightness-sinuosity-ang_vector,26
