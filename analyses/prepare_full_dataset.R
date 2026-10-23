@@ -3,16 +3,29 @@
 # =============================================================================
 # Author: Diego Vicente-Sastre
 # Description: Joins the GLS positions of all species used in the paper into
-#              the two input files of the workflow, and runs basic checks.
+#              the two input files of the workflow, cleans them and runs basic
+#              checks.
 #
-#   Sources (all of them SGAT positions):
+#   Sources (all of them SGAT positions without colony anchoring):
 #     - Calonectris spp.: the 124 tracks used in the submitted paper (IDs
-#       from CAL_subset_phenology_tracks_v9.5.csv), read from 'cal_dir'
-#       (<geo_trip>_<year>_<Sp>_<Colony>_rawpoints[_cdays].csv)
+#       from CAL_subset_phenology_tracks_v9.5.csv), read from 'cal_dir':
+#       <geo_trip>_<year>_<Sp>_<Colony>_rawpoints.csv        (positions)
+#       <geo_trip>_<year>_<Sp>_<Colony>_rawpoints_cdays.csv  (to identify
+#                                                             colony days)
 #     - Hydrobates/*.csv         Hydrobates spp. (';' separator, ',' decimals)
 #     - PUFPUF/*.csv             Puffinus puffinus
-#     - PUFYEL/*.csv             Puffinus yelkouan (read only if the folder
-#                                exists)
+#     - data/PUFYEL/*.csv        Puffinus yelkouan (created from the .trn
+#                                files with analyses/prepare_PUFYEL_positions.R)
+#
+#   Cleaning:
+#     1. The first and last 'fix_ends_n' positions are set at the colony
+#        (deployment and recovery; only the start in incomplete tracks).
+#     2. Calonectris: positions on colony days (identified from activity data
+#        in the SGAT script) are removed. On these days the logger is in the
+#        burrow and positions are wrong (often in Antarctica).
+#     3. All species: positions outside a broad range of each species are
+#        removed. This removes the same kind of errors in the species without
+#        colony days information.
 #
 #   Output (folder 'data/', NOT uploaded to GitHub):
 #     - data/All_positions.csv   one row per position: geo_trip, Date_Time, lon, lat
@@ -38,10 +51,17 @@ cal_dir <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/R
 # are used)
 cal_ids_file <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/Results/Phenology/Algorithm/CAL_subset_phenology_tracks_v9.5.csv'
 
-# Calonectris positions with colony anchoring ('_cdays' files: positions on
-# colony days fixed at or near the colony) or without it ('_rawpoints' files).
-# Main analysis: without anchoring (FALSE), as for the other species.
-colony_anchoring <- FALSE
+out_dir   <- 'data'
+pufyel_dir <- file.path(out_dir, 'PUFYEL')
+check_dir <- file.path(out_dir, 'checks')
+dir.create(check_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Colony days of Calonectris:
+#   'remove' main analysis: positions on colony days are removed
+#   'anchor' as in the submitted paper: positions on colony days are set at
+#            the colony (confirmed days) or at 100 km (probable days)
+#   'keep'   positions on colony days are kept (for sensitivity tests)
+calonectris_colony_days <- 'remove'
 
 # Start and end of the tracks: the logger is deployed and recovered at the
 # colony, so the first and last 'fix_ends_n' positions are set to the colony
@@ -49,29 +69,31 @@ colony_anchoring <- FALSE
 # (e.g. logger failure before the return to the colony) only the start is
 # fixed.
 fix_ends_n <- 2
-incomplete_tracks <- c('1605002002', '1644003001', '1644003002', '19084002001',
-                       'BR50281001001', 'BR50284001001', 'J459002001',
-                       'X238001001')   # Calonectris (from the '_cdays' files)
-# ADD incomplete tracks of the other species here
+incomplete_tracks <- c(
+  # Calonectris (from the '_cdays' files)
+  '1605002002', '1644003001', '1644003002', '19084002001', 'BR50281001001',
+  'BR50284001001', 'J459002001', 'X238001001', '1598002001', 'BR50345001001',
+  # Puffinus yelkouan (logger stopped on 16 March 2022)
+  'BW101001001'
+  # ADD incomplete tracks of the other species here
+)
 
 # Tracks excluded from the analysis (and reason)
 exclude_tracks <- c('CJ636001',    # HYDCAS, Egg Island: not used in the paper
                     'BR928001001') # CALEDW, Montana Clara: not used in the paper
 
-out_dir   <- 'data'
-check_dir <- file.path(out_dir, 'checks')
-dir.create(check_dir, recursive = TRUE, showWarnings = FALSE)
-
-# Species codes, latin and common names
-species_names <- tribble(
-  ~Sp,      ~Species,               ~Common_name,
-  'CALBOR', 'Calonectris borealis', "Cory's shearwater",
-  'CALDIO', 'Calonectris diomedea', "Scopoli's shearwater",
-  'CALEDW', 'Calonectris edwardsii', 'Cape Verde shearwater',
-  'PUFPUF', 'Puffinus puffinus',    'Manx shearwater',
-  'PUFYEL', 'Puffinus yelkouan',    'Yelkouan shearwater',
-  'HYDCAS', 'Hydrobates castro',    'Band-rumped storm petrel',
-  'HYDJAB', 'Hydrobates jabejabe',  'Cape Verde storm petrel'
+# Species codes, names and broad range (decimal degrees). Positions outside
+# the range are removed. The range is broad on purpose (it includes the GLS
+# error); it only removes positions that are clearly impossible.
+species_info <- tribble(
+  ~Sp,      ~Species,                ~Common_name,               ~lon_min, ~lon_max, ~lat_min, ~lat_max,
+  'CALBOR', 'Calonectris borealis',  "Cory's shearwater",            -70,       60,      -50,       60,
+  'CALDIO', 'Calonectris diomedea',  "Scopoli's shearwater",         -70,       60,      -50,       55,
+  'CALEDW', 'Calonectris edwardsii', 'Cape Verde shearwater',        -70,        0,      -50,       40,
+  'PUFPUF', 'Puffinus puffinus',     'Manx shearwater',              -75,       10,      -55,       70,
+  'PUFYEL', 'Puffinus yelkouan',     'Yelkouan shearwater',          -10,       45,       28,       50,
+  'HYDCAS', 'Hydrobates castro',     'Band-rumped storm petrel',    -100,        0,        0,       55,
+  'HYDJAB', 'Hydrobates jabejabe',   'Cape Verde storm petrel',      -45,       10,      -40,       30
 )
 
 
@@ -79,21 +101,7 @@ species_names <- tribble(
 # 2. READ EACH SOURCE ----
 # =============================================================================
 # All sources are converted to the same columns:
-#   geo_trip, Ring, Sp, Colony, Date_Time (UTC), lon, lat, source
-
-# --- 2.1. Calonectris (SGAT csv) ---------------------------------------------
-cal_ids <- read_csv(cal_ids_file, col_select = 'ID', show_col_types = FALSE,
-                    col_types = cols(ID = 'c')) %>%
-  distinct(ID) %>% pull(ID)
-
-suffix <- ifelse(colony_anchoring, '_rawpoints_cdays.csv', '_rawpoints.csv')
-cal_files <- list.files(cal_dir, pattern = paste0(suffix, '$'), full.names = TRUE)
-cal_files <- cal_files[str_extract(basename(cal_files), '^[^_]+') %in% cal_ids]
-
-missing_cal <- setdiff(cal_ids, str_extract(basename(cal_files), '^[^_]+'))
-if (length(missing_cal) > 0) {
-  warning('Calonectris tracks not found: ', paste(missing_cal, collapse = ', '))
-}
+#   geo_trip, Ring, Sp, Colony, Date_Time (UTC), lon, lat, colony_day, source
 
 read_sgat_csv <- function(f) {
   read_csv(f, show_col_types = FALSE,
@@ -103,7 +111,41 @@ read_sgat_csv <- function(f) {
               Colony, Date_Time = ymd_hms(Date_Time, tz = 'UTC'),
               lon, lat, source = basename(f))
 }
-cal <- map_dfr(cal_files, read_sgat_csv)
+
+# --- 2.1. Calonectris (SGAT csv) ---------------------------------------------
+cal_ids <- read_csv(cal_ids_file, col_select = 'ID', show_col_types = FALSE,
+                    col_types = cols(ID = 'c')) %>%
+  distinct(ID) %>% pull(ID)
+
+cal_files <- list.files(cal_dir, pattern = '_rawpoints\\.csv$', full.names = TRUE)
+cal_files <- cal_files[str_extract(basename(cal_files), '^[^_]+') %in% cal_ids]
+
+missing_cal <- setdiff(cal_ids, str_extract(basename(cal_files), '^[^_]+'))
+if (length(missing_cal) > 0) {
+  warning('Calonectris tracks not found: ', paste(missing_cal, collapse = ', '))
+}
+
+# Colony days: positions that differ between the '_rawpoints' and the
+# '_rawpoints_cdays' file of the same track
+read_cal <- function(f) {
+  raw <- read_sgat_csv(f)
+  f_cdays <- sub('_rawpoints\\.csv$', '_rawpoints_cdays.csv', f)
+  if (!file.exists(f_cdays)) {
+    warning('No _cdays file for ', basename(f), ': colony days not identified')
+    return(mutate(raw, colony_day = FALSE))
+  }
+  cdays <- read_sgat_csv(f_cdays)
+  if (nrow(cdays) != nrow(raw) || any(cdays$Date_Time != raw$Date_Time)) {
+    stop('Different positions in ', basename(f), ' and its _cdays file')
+  }
+  raw <- raw %>%
+    mutate(colony_day = abs(lon - cdays$lon) > 1e-6 | abs(lat - cdays$lat) > 1e-6)
+  if (calonectris_colony_days == 'anchor') {
+    raw <- raw %>% mutate(lon = cdays$lon, lat = cdays$lat)
+  }
+  raw
+}
+cal <- map_dfr(cal_files, read_cal)
 
 # --- 2.2. Hydrobates (SGAT csv; ';' separator and ',' decimals) ---------------
 hyd_files <- list.files(file.path(raw_dir, 'Hydrobates'), pattern = '\\.csv$',
@@ -119,17 +161,22 @@ hyd <- map_dfr(hyd_files, function(f) {
               lon, lat, source = basename(f))
 })
 
-# --- 2.3. Puffinus puffinus and P. yelkouan (SGAT csv) -------------------
+# --- 2.3. Puffinus puffinus and P. yelkouan (SGAT csv) -------------------------
 puf_files <- c(list.files(file.path(raw_dir, 'PUFPUF'), pattern = '\\.csv$',
                           full.names = TRUE),
-               list.files(file.path(raw_dir, 'PUFYEL'), pattern = '\\.csv$',
+               list.files(pufyel_dir, pattern = '_rawpoints\\.csv$',
                           full.names = TRUE))
+if (length(list.files(pufyel_dir)) == 0) {
+  warning('No P. yelkouan files: run analyses/prepare_PUFYEL_positions.R first')
+}
 puf <- map_dfr(puf_files, read_sgat_csv)
 
-# --- 2.5. Join all -------------------------------------------------------------
+# --- 2.4. Join all -------------------------------------------------------------
 all_pos <- bind_rows(cal, hyd, puf) %>%
+  mutate(colony_day = coalesce(colony_day, FALSE)) %>%
   filter(!geo_trip %in% exclude_tracks) %>%
-  mutate(Colony = recode(Colony, 'M.Clara' = 'MClara')) %>%
+  mutate(Colony = recode(Colony, 'M.Clara' = 'MClara'),
+         lon = ((lon + 180) %% 360) - 180) %>%   # longitudes in [-180, 180)
   filter(!is.na(lon), !is.na(lat), !is.na(Date_Time)) %>%
   distinct(geo_trip, Date_Time, .keep_all = TRUE) %>%
   arrange(Sp, geo_trip, Date_Time)
@@ -143,10 +190,9 @@ all_pos <- bind_rows(cal, hyd, puf) %>%
 # (decimal degrees, WGS84) and run this script again.
 
 colonies_file <- file.path(out_dir, 'colonies.csv')
-colonies_found <- all_pos %>% distinct(Sp, Colony) %>% arrange(Colony, Sp)
 
 if (!file.exists(colonies_file)) {
-  colonies_found %>%
+  all_pos %>%
     distinct(Colony) %>%
     mutate(Colony.lat = NA_real_, Colony.lon = NA_real_, Notes = '') %>%
     write_csv(colonies_file)
@@ -169,7 +215,53 @@ if (length(missing_col) > 0) {
 
 
 # =============================================================================
-# 4. METADATA (one row per track) ----
+# 4. CLEANING ----
+# =============================================================================
+
+all_pos <- all_pos %>%
+  left_join(colonies %>% dplyr::select(Colony, Colony.lat, Colony.lon),
+            by = 'Colony') %>%
+  left_join(species_info %>% dplyr::select(Sp, lon_min, lon_max, lat_min, lat_max),
+            by = 'Sp') %>%
+  group_by(geo_trip) %>%
+  mutate(k = row_number(), n = n(),
+         # 1. First and last positions at the colony
+         at_colony = k <= fix_ends_n |
+           (k > n - fix_ends_n & !geo_trip %in% incomplete_tracks),
+         lon = ifelse(at_colony & !is.na(Colony.lon), Colony.lon, lon),
+         lat = ifelse(at_colony & !is.na(Colony.lat), Colony.lat, lat),
+         # 2. Colony days (Calonectris)
+         remove_cday = colony_day & !at_colony &
+           calonectris_colony_days == 'remove',
+         # 3. Outside the range of the species
+         remove_range = !at_colony & !remove_cday &
+           (lon < lon_min | lon > lon_max | lat < lat_min | lat > lat_max)) %>%
+  ungroup()
+
+cleaning <- all_pos %>%
+  group_by(Sp) %>%
+  summarise(n_tracks = n_distinct(geo_trip), n_positions = n(),
+            removed_colony_days = sum(remove_cday),
+            removed_out_of_range = sum(remove_range, na.rm = TRUE),
+            .groups = 'drop') %>%
+  mutate(percent_removed = round(100 * (removed_colony_days +
+                                          removed_out_of_range) / n_positions, 1))
+print(cleaning)
+write_csv(cleaning, file.path(check_dir, 'cleaning_summary.csv'))
+
+# Longest gap between positions before cleaning (gaps in the original data;
+# removing colony days creates longer gaps during the breeding period)
+gaps <- all_pos %>%
+  group_by(geo_trip) %>%
+  summarise(max_gap_days = round(max(as.numeric(diff(Date_Time), units = 'days')), 1),
+            .groups = 'drop')
+
+all_pos <- all_pos %>%
+  filter(!remove_cday, !coalesce(remove_range, FALSE))
+
+
+# =============================================================================
+# 5. METADATA (one row per track) ----
 # =============================================================================
 
 metadata <- all_pos %>%
@@ -180,54 +272,52 @@ metadata <- all_pos %>%
             duration_days = round(as.numeric(difftime(end_date, start_date,
                                                       units = 'days'))),
             source = first(source), .groups = 'drop') %>%
-  left_join(species_names, by = 'Sp') %>%
+  left_join(species_info %>% dplyr::select(Sp, Species, Common_name), by = 'Sp') %>%
   left_join(colonies %>% dplyr::select(Colony, Colony.lat, Colony.lon),
             by = 'Colony') %>%
-  mutate(geo_alfanum = geo_trip) %>%
+  mutate(geo_alfanum = geo_trip,
+         incomplete = geo_trip %in% incomplete_tracks) %>%
   relocate(geo_trip, Ring, Sp, Species, Common_name, Colony,
            Colony.lat, Colony.lon)
 
 
 # =============================================================================
-# 5. CHECKS ----
+# 6. CHECKS ----
 # =============================================================================
 
-# --- 5.1. Distance to the colony at the start and end of each track ----------
+# --- 6.1. Distance to the colony at the start and end of each track ----------
 dist_km <- function(lon1, lat1, lon2, lat2) {
   rad <- pi / 180
   6371 * acos(pmin(1, sin(lat1 * rad) * sin(lat2 * rad) +
                      cos(lat1 * rad) * cos(lat2 * rad) * cos((lon2 - lon1) * rad)))
 }
 
-# Positions 3-12 from each end (the first/last 'fix_ends_n' are fixed at the
-# colony in section 6): large distances suggest incomplete tracks
+# Median of the first/last 10 positions that were not fixed at the colony:
+# large distances suggest incomplete tracks
 ends <- all_pos %>%
+  filter(!at_colony) %>%
   group_by(geo_trip) %>%
-  summarise(lon_first = median(head(lon, 10 + fix_ends_n)[-seq_len(fix_ends_n)]),
-            lat_first = median(head(lat, 10 + fix_ends_n)[-seq_len(fix_ends_n)]),
-            lon_last  = median(head(tail(lon, 10 + fix_ends_n), 10)),
-            lat_last  = median(head(tail(lat, 10 + fix_ends_n), 10)),
-            max_gap_days = round(max(as.numeric(diff(Date_Time), units = 'days')), 1),
+  summarise(lon_first = median(head(lon, 10)), lat_first = median(head(lat, 10)),
+            lon_last  = median(tail(lon, 10)), lat_last  = median(tail(lat, 10)),
             .groups = 'drop')
-
 metadata <- metadata %>%
   left_join(ends, by = 'geo_trip') %>%
+  left_join(gaps, by = 'geo_trip') %>%
   mutate(start_dist_km = round(dist_km(lon_first, lat_first, Colony.lon, Colony.lat)),
          end_dist_km   = round(dist_km(lon_last,  lat_last,  Colony.lon, Colony.lat))) %>%
   dplyr::select(-lon_first, -lat_first, -lon_last, -lat_last)
 
-# --- 5.2. Sample size by species and colony (compare with Table S1) ----------
+# --- 6.2. Sample size by species and colony (compare with Table S1) ----------
 sample_size <- metadata %>%
   count(Species, Common_name, Sp, Colony, name = 'n_tracks') %>%
   arrange(Species, Colony)
 print(sample_size, n = Inf)
 write_csv(sample_size, file.path(check_dir, 'sample_size.csv'))
 
-# --- 5.3. Tracks to check -------------------------------------------------------
-# Short tracks, long gaps, or tracks that do not start/end near the colony
-# (median of the first/last 10 positions; GLS error is about 200 km).
+# --- 6.3. Tracks to check -------------------------------------------------------
+# Short tracks, long gaps in the original data, or tracks that do not start/end near the colony
+# (GLS error is about 200 km, but birds can forage far from the colony).
 to_check <- metadata %>%
-  mutate(incomplete = geo_trip %in% incomplete_tracks) %>%
   filter(duration_days < 240 | max_gap_days > 5 |
            start_dist_km > 1000 | end_dist_km > 1000 | is.na(Colony.lat)) %>%
   dplyr::select(geo_trip, Sp, Colony, incomplete, n_positions, start_date,
@@ -236,7 +326,7 @@ to_check <- metadata %>%
 print(to_check, n = Inf)
 write_csv(to_check, file.path(check_dir, 'tracks_to_check.csv'))
 
-# --- 5.4. Map of all tracks and colonies ---------------------------------------
+# --- 6.4. Map of all tracks and colonies ---------------------------------------
 world <- ne_countries(scale = 'medium', returnclass = 'sf')
 map_all <- ggplot() +
   geom_sf(data = world, fill = 'grey85', colour = 'grey60', linewidth = 0.1) +
@@ -254,22 +344,8 @@ ggsave(file.path(check_dir, 'map_all_tracks.png'), map_all,
 
 
 # =============================================================================
-# 6. SAVE ----
+# 7. SAVE ----
 # =============================================================================
-
-# --- 6.1. First and last positions at the colony -------------------------------
-all_pos <- all_pos %>%
-  left_join(colonies %>% dplyr::select(Colony, Colony.lat, Colony.lon),
-            by = 'Colony') %>%
-  group_by(geo_trip) %>%
-  mutate(k = row_number(), n = n(),
-         at_colony = k <= fix_ends_n |
-           (k > n - fix_ends_n & !geo_trip %in% incomplete_tracks),
-         lon = ifelse(at_colony & !is.na(Colony.lon), Colony.lon, lon),
-         lat = ifelse(at_colony & !is.na(Colony.lat), Colony.lat, lat)) %>%
-  ungroup()
-metadata <- metadata %>%
-  mutate(incomplete = geo_trip %in% incomplete_tracks)
 
 write_csv(all_pos %>% dplyr::select(geo_trip, Date_Time, lon, lat),
           file.path(out_dir, 'All_positions.csv'))
