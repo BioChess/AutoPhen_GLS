@@ -73,14 +73,16 @@ kde_level <- 90
 # =============================================================================
 # PART 2 - ADVANCED PARAMETERS (part of the method; do not change) ----
 # =============================================================================
-# NOTE (revision): thresholds marked "(deg)" are in degrees in the current
-# code and will be expressed in km once coordinates are projected [P02].
+# Distances are in km: positions are projected to an azimuthal equidistant
+# projection centred on the colony [P02].
 
 adv <- list(
 
   # --- 2.1. Preparation of the track ------------------------------------------
-  max_step          = 40,   # [P03] (deg) positions with a longer step to the
-                            #   next position are removed (outliers)
+  max_step          = 4440, # [P03] (km) positions with a longer step to the
+                            #   next position are removed (outliers).
+                            #   Equivalent to the 40 degrees used before.
+                            #   TO REVIEW: a maximum speed may be better.
   max_repeated      = 4,    # [P07] more repeated latitudes than this → removed
   edge_positions    = 5,    # [P08] positions checked for repetitions at the
                             #   start and end of the track
@@ -112,6 +114,8 @@ adv <- list(
   # --- 2.6. Agreement score [P22, P24] ----------------------------------------
   # Breeding/wintering: straightness < 0.5, ang_vector < 0.5, sinuosity > 1
   # Migration: the opposite. Score = number of criteria met (0-3).
+  # Sinuosity is dimensionless (see trajmetrics()): sinuosity > 1 means that
+  # the mean cosine of turning angles is lower than 0.6.
   score_straightness = 0.5,
   score_ang_vector   = 0.5,
   score_sinuosity    = 1,
@@ -120,9 +124,9 @@ adv <- list(
 
   # --- 2.7. Equinox (only GLS) [P26, P27] -------------------------------------
   eq_score_factor   = 0.5,  # score of migration segments in the equinox window
-  eq_sd_ratio_mig   = 2,    # migration → B/W if SD(lat) > 2 · SD(lon)
-  eq_sd_limit       = 1,    # (deg) breeding → migration if SD(lon) or SD(lat)
-  eq_sd_ratio_breed = 4,    #   > 1 and SD(lon) > 4 · SD(lat)
+  eq_sd_ratio_mig   = 2,    # migration → B/W if SD(y) > 2 · SD(x)
+  eq_sd_limit       = 111,  # (km) breeding → migration if SD(x) or SD(y)
+  eq_sd_ratio_breed = 4,    #   > 111 km and SD(x) > 4 · SD(y)
 
   # --- 2.8. Corrections [P28, P29, P31] ---------------------------------------
   corr_straightness = 0.2,

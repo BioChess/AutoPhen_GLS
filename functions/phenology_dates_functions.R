@@ -133,7 +133,7 @@ calculate_kde <- function(ph_seg, proj = 4326, level = 90, min_positions = 5,
     kuds <- kernelUD(p_tracks, h = (hVals[[bandwidth]] * 1000), grid = fallback_grid,
                      extent = fallback_extent, same4all = FALSE)
     KDE90 <- getverticeshr(kuds, percent = level)
-    KDE90_sf <- st_as_sf(spTransform(KDE90, CRS(proj)))
+    KDE90_sf <- sf::st_transform(sf::st_as_sf(KDE90), crs = proj)
   }
   
   return(KDE90_sf)
@@ -355,4 +355,88 @@ extract_phen_dates <- function(results_list) {
     mutate(across(everything(), as.Date))
   
   return(kde_dates_df)  # Return the list of extracted dates
+}
+
+
+################################################################################
+# phenology_track(): full step 3 for ONE track
+################################################################################
+# Runs, for one track, the same steps shown in 03_Phenology_dates.qmd: checks
+# the sequence of stages, delimits breeding and wintering areas (KDE) and
+# extracts arrival and departure dates.
+#
+# Arguments:
+#   track.ph  positions of one track classified by script 01 (or 02), with
+#             columns ID, date, x (longitude), y (latitude), Breed2
+#   info      one row of the metadata (geo_trip, Ring, Sp, Colony, Colony.lon,
+#             Colony.lat)
+#   min_stage_length, kde_level, adv   parameters (parameters.R)
+#   world     world map (sf) for the plot; make_plot TRUE to return the map
+#
+# Returns a list with: dates (one row with the phenological dates) and map.
+
+phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
+                            world = NULL, make_plot = FALSE) {
+
+  track.ph <- track.ph %>% arrange(date)
+  if (!'Equinox' %in% names(track.ph)) track.ph$Equinox <- 'No'
+
+  # --- Sequence of stages (B1, mig1, W1, ..., mig2, B2) ----------------------
+  track.ph2 <- check_phen(track.ph, "Breed2", min_length = min_stage_length)
+  track.ph2$Breed3 <- phen_periods(track.ph2$Breed2)
+
+  BW_periods <- unique(track.ph2$Breed3[grep("^B|^W", track.ph2$Breed3)])
+  B_periods  <- grep("^B", BW_periods, value = TRUE)
+  # If the track does not start with breeding, the first breeding stage is B2
+  if (length(B_periods) > 0 && B_periods[1] == 'B1' &&
+      track.ph2$Breed2[1] != 'B') {
+    track.ph2 <- track.ph2 %>%
+      mutate(Breed3 = ifelse(Breed3 == 'B1', 'B2', Breed3))
+  }
+
+  track_f <- formatFields(dataGroup = track.ph2, fieldID = "ID",
+                          fieldDateTime = "date", fieldLon = "x",
+                          fieldLat = "y")
+
+  Migrant <- ifelse(all(track_f$Breed3 == 'B1'), 'Resident', 'Migrant')
+
+  # --- KDE and dates for each breeding/wintering stage ------------------------
+  ph_seg.list  <- subset_to_kde(track_f, "Breed3")
+  results_list <- list()
+  for (k in names(ph_seg.list)) {
+    ph_seg <- ph_seg.list[[k]]
+    stg <- ph_seg[!(ph_seg$Breed3 %in% c("mig1", "mig2")), ]
+    if (is.null(ph_seg) || nrow(stg) == 0) {
+      results_list[[k]] <- list(KDE90_sf = NULL,
+                                arr_point = data.frame(Longitude = NA, Latitude = NA),
+                                arr_date = NA,
+                                dep_point = data.frame(Longitude = NA, Latitude = NA),
+                                dep_date = NA)
+      next
+    }
+    KDE90_sf <- calculate_kde(ph_seg, proj = 4326, level = kde_level,
+                              min_positions = adv$kde_min_positions,
+                              bandwidth = adv$kde_bandwidth,
+                              fallback_grid = adv$kde_fallback_grid,
+                              fallback_extent = adv$kde_fallback_extent)
+    phen_dates <- find_dates(ph_seg, KDE90_sf, proj = 4326, stage = k)
+    results_list[[k]] <- c(list(KDE90_sf = KDE90_sf), phen_dates)
+  }
+  if (Migrant == 'Resident' && 'B1' %in% names(results_list)) {
+    results_list[["B1"]][["dep_date"]] <- as.Date(NA)
+  }
+
+  # --- Output ----------------------------------------------------------------
+  dates <- data.frame(Ring = info$Ring, Sp = info$Sp, Colony = info$Colony,
+                      ID = info$geo_trip, Migrant = Migrant,
+                      Year1 = year(track.ph$date[1]),
+                      Year2 = year(track.ph$date[nrow(track.ph)]),
+                      extract_phen_dates(results_list))
+
+  map <- NULL
+  if (make_plot) {
+    map <- phen_map(track = track_f, col.lat = info$Colony.lat,
+                    col.lon = info$Colony.lon, results_list, world)
+  }
+  list(dates = dates, map = map)
 }
