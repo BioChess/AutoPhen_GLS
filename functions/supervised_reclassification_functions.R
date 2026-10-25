@@ -96,7 +96,7 @@ reclassSegs <- function(track, seg_df) {
       new_segments <- points() %>%
        dplyr::select(Seg, Ph.stage =Breed2, 
                      Start, End,
-                     Eq, Confidence,  Check)%>%
+                     Eq, Agreement, Check, Check_reason)%>%
         dplyr::distinct()%>%
         drop_na(Ph.stage)
       segments(new_segments)
@@ -461,7 +461,7 @@ supervisedClass <- function(seg_df, track_df, byseg = T, x11 = T) {
       l_day = as.Date(l_day),
       segment = row_number()
     ) %>%
-    dplyr::select(ID, State = state, Seg = segment, Breed, Start = f_day, End = l_day, Eq, Confidence,Check) %>%
+    dplyr::select(ID, State = state, Seg = segment, Breed, Start = f_day, End = l_day, Eq, Agreement, Check, Check_reason) %>%
     mutate(Breed2 = case_when(
       Breed == 'mig' & cumsum(replace_na(Breed == 'W', FALSE)) > 0 & 
         rev(cumsum(rev(replace_na(Breed == "W", FALSE)))) == 0 ~ 'mig2',

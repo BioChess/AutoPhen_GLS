@@ -112,29 +112,34 @@ adv <- list(
                              #   ang_vector → breeding
 
   # --- 2.6. Agreement score [P22, P24] ----------------------------------------
+  # Agreement between the class of a segment and its movement metrics:
   # Breeding/wintering: straightness < 0.5, ang_vector < 0.5, sinuosity > 1
-  # Migration: the opposite. Score = number of criteria met (0-3).
+  # Migration: the opposite. Agreement = proportion of criteria met (0, 1/3,
+  # 2/3 or 1); 0 for impossible classes (see agreement_score()).
   # Sinuosity is dimensionless (see trajmetrics()): sinuosity > 1 means that
   # the mean cosine of turning angles is lower than 0.6.
   score_straightness = 0.5,
   score_ang_vector   = 0.5,
   score_sinuosity    = 1,
   impossible_straightness = 0.2,  # migration with lower straightness and
-  impossible_ang_vector   = 0.9,  #   lower ang_vector → score 0
+  impossible_ang_vector   = 0.9,  #   lower ang_vector → agreement 0
 
   # --- 2.7. Equinox (only GLS) [P26, P27] -------------------------------------
-  eq_score_factor   = 0.5,  # score of migration segments in the equinox window
   eq_sd_ratio_mig   = 2,    # migration → B/W if SD(y) > 2 · SD(x)
   eq_sd_limit       = 111,  # (km) breeding → migration if SD(x) or SD(y)
   eq_sd_ratio_breed = 4,    #   > 111 km and SD(x) > 4 · SD(y)
 
   # --- 2.8. Corrections [P28, P29, P31] ---------------------------------------
   corr_straightness = 0.2,
-  corr_score        = 1.5,
+  corr_score        = 0.5,  # agreement (0-1)
   corr_sinuosity    = 1,
 
   # --- 2.9. Segments to review [P34] ------------------------------------------
-  check_score       = 2,    # segments with a lower score are flagged 'Check'
+  check_score       = 0.6,  # segments with lower agreement (0 or 1/3) are
+                            #   flagged 'Check'
+  w_far_km          = 1000, # wintering segments farther than this from the
+                            #   main wintering segment are flagged 'Check'
+                            #   (possible stopovers or migration loops)
 
   # --- 2.10. Kernel density estimation [P38, P40, P42] ------------------------
   kde_min_positions = 5,    # minimum positions to calculate a KDE

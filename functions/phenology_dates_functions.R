@@ -474,6 +474,36 @@ phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
                       Year2 = year(track.ph$date[nrow(track.ph)]),
                       extract_phen_dates(results_list))
 
+  # --- Dates to review --------------------------------------------------------
+  # (1) Dates within an equinox window (GLS): latitude is uncertain, so the
+  #     date may be wrong (e.g. arrival at the colony during the March
+  #     equinox).
+  date_cols <- grep('_KDE$', names(dates), value = TRUE)
+  eq_days <- unique(as.Date(track.ph$date[track.ph$Equinox != 'No']))
+  in_eq <- date_cols[sapply(date_cols, function(d) {
+    x <- as.Date(dates[[d]]); !is.na(x) && x %in% eq_days })]
+  dates$Dates_in_equinox <- paste(sub('_KDE$', '', in_eq), collapse = '; ')
+
+  # (2) Overlap between the KDE of consecutive breeding and wintering stages:
+  #     arrival and departure are poorly defined when the areas overlap.
+  stg <- names(results_list)[grepl('^B|^W', names(results_list))]
+  stg <- stg[order(sapply(stg, function(k) {
+    i <- which(track.ph2$Breed3 == k); if (length(i)) min(i) else Inf }))]
+  overlaps <- character(0)
+  for (k in seq_len(max(0, length(stg) - 1))) {
+    a <- results_list[[stg[k]]]$KDE90_sf; b <- results_list[[stg[k + 1]]]$KDE90_sf
+    if (!is.null(a) && !is.null(b)) {
+      ov <- tryCatch(any(lengths(sf::st_intersects(
+                       sf::st_union(sf::st_transform(a, 4326)),
+                       sf::st_union(sf::st_transform(b, 4326)))) > 0),
+                     error = function(e) FALSE)
+      if (ov) overlaps <- c(overlaps, paste0(stg[k], '-', stg[k + 1]))
+    }
+  }
+  dates$KDE_overlap <- paste(overlaps, collapse = '; ')
+  dates$Check <- ifelse(dates$Dates_in_equinox != '' | dates$KDE_overlap != '',
+                        'Check', 'Ok')
+
   map <- NULL
   if (make_plot) {
     map <- phen_map(track = track_f, col.lat = info$Colony.lat,

@@ -122,6 +122,77 @@ remove_duplicates <- function(data, equinox_days = 20,
 
 ################################################################################
 
+################################################################################
+# agreement_score(): agreement between the class of each segment and its
+# movement metrics (0-1). Breeding and wintering segments are expected to be
+# tortuous (straightness < 0.5, ang_vector < 0.5, sinuosity > 1) and
+# migration segments the opposite. The score is the proportion of these three
+# criteria that agree with the class. It is 0 for impossible classes:
+# breeding far from the colony (NSCD above the limit), wintering near the
+# colony, or migration with very low straightness and ang_vector.
+# The score is a heuristic: it describes how typical the movement of a
+# segment is for its class, not the probability that the class is correct.
+
+agreement_score <- function(df_seg, R2n, adv) {
+  stationary <- (df_seg$straightness < adv$score_straightness) +
+    (df_seg$ang_vector < adv$score_ang_vector) +
+    (df_seg$sinuosity > adv$score_sinuosity)
+  moving <- (df_seg$straightness > adv$score_straightness) +
+    (df_seg$ang_vector > adv$score_ang_vector) +
+    (df_seg$sinuosity < adv$score_sinuosity)
+  n_agree <- ifelse(df_seg$Breed %in% c('B', 'W'), stationary, moving)
+
+  impossible <- with(df_seg,
+    (Breed == 'B' & R2n_mean > R2n) |
+    (Breed == 'W' & R2n_mean < R2n) |
+    (Breed == 'mig' & straightness < adv$impossible_straightness &
+       ang_vector < adv$impossible_ang_vector))
+
+  score <- n_agree / 3
+  score[dplyr::coalesce(impossible, FALSE)] <- 0
+  round(score, 3)
+}
+
+################################################################################
+# flag_segments(): segments to review ('Check') and the reason(s):
+#   low agreement   agreement lower than adv$check_score
+#   corrected       class changed by the correction rules
+#   equinox         change of stage within an equinox window (GLS)
+#   direct B-W      change between breeding and wintering without migration
+#   far W           wintering segment more than adv$w_far_km away from the
+#                   main (longest) wintering segment (stopover or loop?)
+
+flag_segments <- function(df_seg, adv) {
+  n <- nrow(df_seg)
+  change <- (df_seg$Breed != dplyr::lag(df_seg$Breed)) |
+    (df_seg$Breed != dplyr::lead(df_seg$Breed))
+  change[is.na(change)] <- FALSE
+  direct <- (df_seg$Breed == 'W' & dplyr::lag(df_seg$Breed) == 'B') |
+    (df_seg$Breed == 'B' & dplyr::lag(df_seg$Breed) == 'W')
+  direct <- dplyr::coalesce(direct, FALSE)
+
+  far_W <- rep(FALSE, n)
+  w <- which(df_seg$Breed == 'W')
+  if (length(w) > 1) {
+    core <- w[which.max((df_seg$end - df_seg$begin)[w])]
+    d <- sqrt((df_seg$mu.x - df_seg$mu.x[core])^2 +
+                (df_seg$mu.y - df_seg$mu.y[core])^2)
+    far_W <- df_seg$Breed == 'W' & d > adv$w_far_km
+  }
+
+  reasons <- cbind(
+    'low agreement' = dplyr::coalesce(df_seg$Agreement < adv$check_score, FALSE),
+    'corrected'     = df_seg$Breed != df_seg$Breed_0,
+    'equinox'       = df_seg$Eq & change,
+    'direct B-W'    = direct,
+    'far W'         = far_W)
+  df_seg$Check_reason <- apply(reasons, 1, function(r) paste(colnames(reasons)[r], collapse = '; '))
+  df_seg$Check <- ifelse(df_seg$Check_reason == '', 'Ok', 'Check')
+  df_seg
+}
+
+################################################################################
+
 trajmetrics <- function(trj){
   
   if (!requireNamespace("trajr", quietly = TRUE)) {
@@ -317,40 +388,14 @@ run_clust <- function(var_comb, df_seg,
         TRUE ~ NA_character_
       )
     ) %>%
-    mutate(
-      B_W = ifelse(Breed %in% c('B', 'W'),
-                   (straightness < adv$score_straightness) +
-                     (ang_vector < adv$score_ang_vector) +
-                     (sinuosity > adv$score_sinuosity),
-                   0),
-      mig = ifelse(Breed == 'mig',
-                   (straightness > adv$score_straightness) +
-                     (ang_vector > adv$score_ang_vector) +
-                     (sinuosity < adv$score_sinuosity),
-                   0)
-    ) %>%
-    mutate(
-      Confidence = case_when(
-        row_number() == 1 ~ 3,
-        row_number() == nrow(.) ~ 3,
-        # Zero confidence for impossible classifications
-        Breed == 'B' & R2n_mean > R2n ~ 0,
-        Breed == 'W' & R2n_mean < R2n ~ 0,
-        Breed == 'mig' & straightness < adv$impossible_straightness &
-          ang_vector < adv$impossible_ang_vector ~ 0,
-        B_W == 3 | mig == 3 ~ 3,
-        B_W == 2 | mig == 2 ~ 2,
-        B_W == 1 | mig == 1 ~ 1,
-        TRUE ~ 0
-      )
-    ) %>%
-    dplyr::select(-B_W, -mig)
-  
-  # Calculate the sum of confidence for this recipe
-  mean_confidence <- mean(df_clust$Confidence, na.rm = TRUE)/3
+    mutate(R2n_limit = R2n)
+  df_clust$Agreement <- agreement_score(df_clust, R2n = R2n, adv = adv)
+
+  # Mean agreement of this combination of metrics
+  mean_agreement <- mean(df_clust$Agreement, na.rm = TRUE)
   
   out <-list(
-    Confidence = mean_confidence,
+    Agreement = mean_agreement,
     df_clust = df_clust,
     metrics = var_comb
   )
@@ -445,13 +490,14 @@ segment_class <- function (mode_segclust =  mode_segclust,
     .options = furrr_options(seed = TRUE)
     )
     
-    # Find the best result by the sum of confidence
+    # Best combination of metrics: highest mean agreement (and fewest
+    # metrics if tied)
     best <- tibble(
-      Confidence = map_dbl(clustering_results, "Confidence"),
+      Agreement = map_dbl(clustering_results, "Agreement"),
       Metrics = map_int(clustering_results, ~ length(.x$metrics))
     ) %>%
       mutate(pos = row_number()) %>%
-      arrange(desc(Confidence), Metrics) %>%
+      arrange(desc(Agreement), Metrics) %>%
       slice(1) %>%
       pull(pos)
 
@@ -465,8 +511,10 @@ segment_class <- function (mode_segclust =  mode_segclust,
 ################################################################################
 
 equinox_interference <- function(df_seg = segments1, track = df_trip2,
-                                 Sep_eq, Mar_eq, equinox_days = 20,
-                                 score_factor = 0.5){
+                                 Sep_eq, Mar_eq, equinox_days = 20){
+  # Flags the segments that overlap an equinox window (Eq = TRUE). The
+  # agreement score is not changed: segments at a change of stage within an
+  # equinox window are flagged for review (see flag_segments()).
   if (is.null(equinox_days)) {
     # No equinox effect (data other than GLS)
     return(df_seg %>%
@@ -483,10 +531,6 @@ equinox_interference <- function(df_seg = segments1, track = df_trip2,
                   l_day = as.Date(track$date[end])) %>%
     rowwise() %>%
     dplyr::mutate(Eq = any(eq_dates >= f_day & eq_dates <= l_day)) %>%
-    dplyr::mutate(Confidence = ifelse(Eq == T & Breed == 'mig' &
-                                       Confidence < 3, 
-                                      # 2*sd.x < sd.y,
-                                      Confidence * score_factor, Confidence))%>%
     ungroup()
   
   
@@ -527,7 +571,7 @@ segment_correction <- function(df_seg = segments2, adv){
   # Migrating area classified as breeding area
   segs5 <- segs4 %>%
     mutate(
-      Breed = ifelse(ok(Breed == 'B' & Confidence < adv$corr_score & 
+      Breed = ifelse(ok(Breed == 'B' & Agreement < adv$corr_score & 
                        (lead(Breed) == 'mig' | lag(Breed) == 'mig') &
                        straightness > adv$corr_straightness), 
                      case_when(
@@ -561,16 +605,11 @@ segment_correction <- function(df_seg = segments2, adv){
                              Breed == 'B' & lead(Breed) == 'mig' &
                              lag(Breed) == 'mig'),'W', Breed)) %>%
     mutate(
-      Breed_0 = df_seg$Breed
-    ) %>%
-    mutate(
-      Confidence = case_when(
-        Breed_0 != Breed ~ 3,
-      #   Breed_0 == 'B' & Breed2 == 'W' ~ 1,  
-      #   Breed_0 != 'B' & Breed2 == 'B' ~ 1,                
-        TRUE ~ Confidence                         
-      )
+      Breed_0 = df_seg$Breed,
+      Agreement_0 = df_seg$Agreement
     )
+  # Agreement of the final classes (also for the corrected segments)
+  out$Agreement <- agreement_score(out, R2n = out$R2n_limit[1], adv = adv)
   
   return(out)
 }
@@ -782,16 +821,9 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
                              adv = adv, lmin = lmin)
   segments2 <- equinox_interference(df_seg = segments1$df_clust,
                                     track = track_df3, Sep_eq, Mar_eq,
-                                    equinox_days = eq_days,
-                                    score_factor = adv$eq_score_factor)
+                                    equinox_days = eq_days)
   segments3 <- segment_correction(df_seg = segments2, adv = adv) %>%
-    mutate(Check = case_when(
-      Confidence < adv$check_score ~ 'Check',
-      Confidence >= adv$check_score & Eq & !(row_number() %in% c(1, n())) &
-        (lag(Breed) != Breed | lead(Breed) != Breed) ~ 'Check',
-      # Direct change between breeding and wintering (no migration between)
-      (Breed == 'W' & lag(Breed) == 'B') | (Breed == 'B' & lag(Breed) == 'W') ~ 'Check',
-      TRUE ~ 'Ok'))
+    flag_segments(adv = adv)
   segments3 <- cbind(ID = geo_trip, Sp = info$Sp, segments3)
 
   seg_df <- data.frame(Ring = info$Ring, Sp = info$Sp, Colony = info$Colony,
@@ -801,8 +833,8 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
                        n_seg_B = sum(segments3$Breed == 'B', na.rm = TRUE),
                        n_seg_mig = sum(segments3$Breed == 'mig', na.rm = TRUE),
                        n_seg_W = sum(segments3$Breed == 'W', na.rm = TRUE),
-                       Confidence_0 = mean(segments2$Confidence, na.rm = TRUE)/3,
-                       Confidence = mean(segments3$Confidence, na.rm = TRUE)/3,
+                       Agreement_0 = round(mean(segments3$Agreement_0, na.rm = TRUE), 3),
+                       Agreement = round(mean(segments3$Agreement, na.rm = TRUE), 3),
                        Metrics = paste(segments1$metrics, collapse = '-'),
                        n_check = sum(segments3$Check == 'Check'),
                        Direct_BW = any((segments3$Breed == 'W' & lag(segments3$Breed) == 'B') |

@@ -61,7 +61,7 @@ prep_seg <- function(seg_df) {
     ) %>%
     dplyr::select(
       ID, State = state, Seg = segment, Breed,
-      Start = f_day, End = l_day, Eq, Confidence, Check
+      Start = f_day, End = l_day, Eq, Agreement, Check, Check_reason
     ) %>%
     mutate(Breed2 = case_when(
       Breed == "mig" & cumsum(replace_na(Breed == "W", FALSE)) > 0 &
@@ -388,7 +388,7 @@ server <- function(input, output, session) {
   output$seg_table <- renderDT({
     req(rv$track_seg)
     rv$track_seg %>%
-      dplyr::select(Seg, Ph.stage = Breed2, Start, End, Eq, Confidence, Check) %>%
+      dplyr::select(Seg, Ph.stage = Breed2, Start, End, Eq, Agreement, Check, Check_reason) %>%
       distinct() %>% drop_na(Ph.stage) %>%
       datatable(options = list(pageLength = 10, scrollX = TRUE))
   })
@@ -489,7 +489,7 @@ server <- function(input, output, session) {
     
     # final segments derived from the reclassified track_seg
     seg_final <- rv$track_seg %>%
-      dplyr::select(Breed2, State, Seg, Start, End, Eq, Confidence, Check) %>%
+      dplyr::select(Breed2, State, Seg, Start, End, Eq, Agreement, Check, Check_reason) %>%
       distinct() %>% drop_na(Breed2)
     
     rv$track_list[[id]] <- track_final

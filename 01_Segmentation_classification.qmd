@@ -200,7 +200,7 @@ segclust_plot + (map_seg / bic_plot)
 
 The idea behind this part of the procedure is that there are three migratory behaviours: (1) breeding, (2) wintering and (3) migration. Breeding and wintering are stationary behaviours, meanwhile wintering and migration are non-breeding behaviours. Stationary segments can be defined by low straightness and mean angle vector, and high sinuosity values; in turn, non-breeding segments can be characterize by high NSCD values.
 
-Therefore, a double hierarchical clustering is performed by `segment_class` function. And this clustering is performed repeatedly per every possible combination of metrics we use. Each classification resulting is given a confidence value. The best classification of the segments is selected by the highest confidence value.
+Therefore, a double hierarchical clustering is performed by `segment_class` function. And this clustering is performed repeatedly per every possible combination of metrics we use. Each segment gets an agreement score (0-1): the proportion of three movement criteria (straightness, mean vector of turning angles and sinuosity) that agree with its class. The classification with the highest mean agreement is selected. The agreement score is a heuristic: it shows how typical the movement of a segment is for its class, not the probability that the class is correct.
 
 Following functions, `segment_class` and `segment_correction`, get two thing to refine the resulting classification:
 
@@ -222,23 +222,15 @@ segments1 <- segment_class(mode_segclust = mode_segclust,
 segments2 <- equinox_interference(df_seg = segments1$df_clust, 
                                   track = track_df3,
                                   Sep_eq, Mar_eq,
-                                  equinox_days = eq_days,
-                                  score_factor = adv$eq_score_factor)
+                                  equinox_days = eq_days)
 
 
 segments3 <- segment_correction(df_seg = segments2, adv = adv)
 
-segments3 <- segments3 %>%
-  mutate(
-    Check = case_when(
-      Confidence < adv$check_score ~ 'Check',
-      Confidence >= adv$check_score & Eq & !(row_number() %in% c(1, n())) & 
-        (lag(Breed) != Breed | lead(Breed) != Breed) ~ 'Check',
-      # Direct change between breeding and wintering (no migration between)
-      (Breed == 'W' & lag(Breed) == 'B') | (Breed == 'B' & lag(Breed) == 'W') ~ 'Check',
-      TRUE ~ 'Ok'
-    )
-  )
+# Segments to review ('Check') and the reasons: low agreement, corrected by
+# the rules, change of stage in an equinox window, direct change between
+# breeding and wintering, wintering segment far from the main wintering area
+segments3 <- flag_segments(segments3, adv = adv)
 segments3 <- cbind(ID = geo_trip, Sp = sp, segments3)
 
 # Summary of segmentation/clustering information
@@ -249,10 +241,10 @@ seg_df <- data.frame(Ring = ring, Sp = sp, Colony = col.name,
                      n_seg_B = length(segments3$Breed[segments3$Breed == 'B']),
                      n_seg_mig = length(segments3$Breed[segments3$Breed == 'mig']),
                      n_seg_W = length(segments3$Breed[segments3$Breed == 'W']),
-                     Confidence_0 = mean(segments2$Confidence, na.rm = T)/3,
-                     Confidence = mean(segments3$Confidence, na.rm = T)/3,
-                     Metrics = paste(segments1$metrics, collapse = '-')
-                     
+                     Agreement_0 = round(mean(segments3$Agreement_0, na.rm = T), 3),
+                     Agreement = round(mean(segments3$Agreement, na.rm = T), 3),
+                     Metrics = paste(segments1$metrics, collapse = '-'),
+                     n_check = sum(segments3$Check == 'Check')
 )
 ```
 
