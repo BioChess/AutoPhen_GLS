@@ -119,7 +119,7 @@ calculate_kde <- function(ph_seg, stage, proj = 4326, level = 90,
   # GLS: positions around the equinoxes have large latitude errors. They are
   # not used for the KDE if enough positions remain.
   if (exclude_equinox && 'Equinox' %in% names(stage_points)) {
-    no_eq <- stage_points[!stage_points$Equinox %in% 'Yes', ]
+    no_eq <- stage_points[stage_points$Equinox %in% 'No', ]
     if (nrow(no_eq) > min_positions) stage_points <- no_eq
   }
 
@@ -406,6 +406,22 @@ phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
 
   # --- Sequence of stages (B1, mig1, W1, ..., mig2, B2) ----------------------
   track.ph2 <- check_phen(track.ph, "Breed2", min_length = min_stage_length)
+
+  # Movements between two wintering stages (without breeding between them)
+  # are part of the same wintering stage: W-mig-W becomes one W
+  r <- rle(track.ph2$Breed2)
+  is_W <- r$values == 'W'
+  for (k in seq_along(r$values)) {
+    if (r$values[k] %in% c('mig1', 'mig2', 'mig')) {
+      prev_W <- which(is_W[seq_len(k - 1)])
+      next_W <- which(is_W[-seq_len(k)]) + k
+      if (length(prev_W) > 0 && length(next_W) > 0) {
+        between <- r$values[max(prev_W):min(next_W)]
+        if (!any(between == 'B')) r$values[k] <- 'W'
+      }
+    }
+  }
+  track.ph2$Breed2 <- inverse.rle(r)
   track.ph2$Breed3 <- phen_periods(track.ph2$Breed2)
 
   BW_periods <- unique(track.ph2$Breed3[grep("^B|^W", track.ph2$Breed3)])

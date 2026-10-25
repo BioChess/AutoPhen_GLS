@@ -92,6 +92,7 @@ for (i in seq_len(nrow(metadata))) {
     classify_track(track = track, info = info,
                    Kmax = Kmax, lmin = lmin, ncluster = ncluster,
                    eq_window_days = eq_window_days, adv = adv,
+                   use_equinox = use_equinox,
                    make_plots = save_plots),
     error = function(e) {
       message('  ERROR in track ', info$geo_trip, ': ', conditionMessage(e))

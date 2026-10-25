@@ -133,10 +133,16 @@ Transforming into ltraj object, we can get two things at once: (1) x and y colum
 #### Cleaning tracking data for segmentation and clustering
 
 ```{r}
-# Determine if there are movement during equinox days
-# Select equinoxes
-Sep_eq <- as.Date(paste0(start_year, '-09-21'))
-Mar_eq <- as.Date(paste0(end_year, '-03-21'))
+# Equinoxes (only for GLS data): first September and March equinoxes after
+# the start of the track
+next_date <- function(start, month_day) {
+  d <- as.Date(paste0(year(start), month_day))
+  if (d < as.Date(start)) d <- as.Date(paste0(year(start) + 1, month_day))
+  d
+}
+Sep_eq  <- next_date(track$Date_Time[1], '-09-21')
+Mar_eq  <- next_date(track$Date_Time[1], '-03-21')
+eq_days <- if (use_equinox) eq_window_days else NULL
 ```
 
 Optionally we can remove colony days if they cause low-variance segments that `segclust` function cannot handle.
@@ -152,7 +158,7 @@ First, we remove erroneus positions, where the distance among them is too large.
 # Clean erroneus positions
 track_df2 <- clean_positions(data = track_df, dist_threshold = adv$max_step)
 
-track_df3 <- remove_duplicates(data = track_df2, equinox_days = eq_window_days, 
+track_df3 <- remove_duplicates(data = track_df2, equinox_days = eq_days, 
                               # cdays = cdays,
                               Sep_eq = Sep_eq, Mar_eq = Mar_eq,
                               dup_threshold = adv$max_repeated,
@@ -216,7 +222,7 @@ segments1 <- segment_class(mode_segclust = mode_segclust,
 segments2 <- equinox_interference(df_seg = segments1$df_clust, 
                                   track = track_df3,
                                   Sep_eq, Mar_eq,
-                                  equinox_days = eq_window_days,
+                                  equinox_days = eq_days,
                                   score_factor = adv$eq_score_factor)
 
 
@@ -228,6 +234,8 @@ segments3 <- segments3 %>%
       Confidence < adv$check_score ~ 'Check',
       Confidence >= adv$check_score & Eq & !(row_number() %in% c(1, n())) & 
         (lag(Breed) != Breed | lead(Breed) != Breed) ~ 'Check',
+      # Direct change between breeding and wintering (no migration between)
+      (Breed == 'W' & lag(Breed) == 'B') | (Breed == 'B' & lag(Breed) == 'W') ~ 'Check',
       TRUE ~ 'Ok'
     )
   )
@@ -277,13 +285,14 @@ track_df5 <- track_df4 %>%
   mutate(x_km = x, y_km = y, x = lon, y = lat) %>%
   dplyr::select(-lon, -lat) %>%
   mutate(Equinox = ifelse(
+    !use_equinox, 'No', ifelse(
     date >= (as.Date(Sep_eq) - days(eq_window_days)) & 
       date <= (as.Date(Sep_eq) + days(eq_window_days)), 'Sep',
     ifelse(
       date >= (as.Date(Mar_eq) - days(eq_window_days)) & 
         date <= (as.Date(Mar_eq) + days(eq_window_days)), 'Mar', 'No'
     )
-  ))
+  )))
 
 ```
 

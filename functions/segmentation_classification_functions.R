@@ -52,12 +52,17 @@ remove_duplicates <- function(data, equinox_days = 20,
   }
   n <- nrow(data)
   
-  data <- data %>%
-    mutate(Equinox = ifelse(date >= (as.Date(Sep_eq) - days(equinox_days)) & 
-                              date <= (as.Date(Sep_eq) + days(equinox_days)), 'Sep',
-                            ifelse(date >= (as.Date(Mar_eq) - days(equinox_days)) & 
-                                     date <= (as.Date(Mar_eq) + days(equinox_days)), 'Mar', 'No'))
-    )
+  # Equinox periods (only for GLS data; equinox_days = NULL for other data)
+  if (is.null(equinox_days)) {
+    data$Equinox <- 'No'
+  } else {
+    data <- data %>%
+      mutate(Equinox = ifelse(date >= (as.Date(Sep_eq) - days(equinox_days)) & 
+                                date <= (as.Date(Sep_eq) + days(equinox_days)), 'Sep',
+                              ifelse(date >= (as.Date(Mar_eq) - days(equinox_days)) & 
+                                       date <= (as.Date(Mar_eq) + days(equinox_days)), 'Mar', 'No'))
+      )
+  }
   if (!is.null(cdays)){
     data <- data %>%
       filter(!(as.Date(date) %in% cdays$date))
@@ -81,16 +86,25 @@ remove_duplicates <- function(data, equinox_days = 20,
     cat('March equinox positions without latitudinal movement has been removed \n')
   }
   
-  if(sum(duplicated(data$lat)) > dup_threshold){
-    data <- data %>%
-      distinct(lat, .keep_all = T)
+  # Positions fixed at the colony (first and last positions of the track,
+  # at x = 0, y = 0) are repeated on purpose: they are not checked
+  at_colony <- abs(data$x) < 1e-6 & abs(data$y) < 1e-6
+  lat_check <- ifelse(at_colony, NA, data$lat)
+  dup_lat   <- duplicated(lat_check) & !is.na(lat_check)
+
+  if(sum(dup_lat) > dup_threshold){
+    data <- data[!dup_lat, ]
+    at_colony <- at_colony[!dup_lat]
     cat('Other duplicated latitudes has been removed \n')
   }
   
-  if(any(duplicated(tail(data$lat, edge_positions)))){
-    data <- data[1:(nrow(data) - edge_positions),]
-  } else if (any(duplicated(head(data$lat, edge_positions)))){
-    data <- data[edge_positions:nrow(data),]
+  lat_free <- data$lat[!at_colony]
+  if(any(duplicated(tail(lat_free, edge_positions)))){
+    drop <- tail(which(!at_colony), edge_positions)
+    data <- data[-drop, ]
+  } else if (any(duplicated(head(lat_free, edge_positions)))){
+    drop <- head(which(!at_colony), edge_positions - 1)
+    data <- data[-drop, ]
   }
   
   if(nrow(data) == n){
@@ -120,8 +134,17 @@ trajmetrics <- function(trj){
   }
   
   out <- tryCatch({
-    # Rediscretize the trajectory based on the mean step length
-    trj_r <- trajr::TrajRediscretize(trj, R = mean(trajr::TrajStepLengths(trj)))
+    # Rediscretize the trajectory based on the mean step length. In very
+    # short or compact segments (e.g. positions around the colony) this can
+    # fail; then a shorter step length is used (half, then a quarter).
+    R0 <- mean(trajr::TrajStepLengths(trj))
+    trj_r <- NULL
+    for (f in c(1, 0.5, 0.25)) {
+      trj_r <- tryCatch(trajr::TrajRediscretize(trj, R = R0 * f),
+                        error = function(e) NULL)
+      if (!is.null(trj_r) && nrow(trj_r) > 2) break
+    }
+    if (is.null(trj_r)) stop('the segment could not be rediscretised')
     
     # Turning angles (mean)
     ang_vector <- Mod(trajr::TrajMeanVectorOfTurningAngles(trj_r))  # mean vector angle
@@ -159,9 +182,13 @@ trajmetrics <- function(trj){
       dc_sd = sddc
     )
   }, error = function(e) {
-    # Return an informative error message if something goes wrong
-    cat("An error occurred while processing the trajectory data: ", e$message, "\n")
-    return(NULL)
+    # If the metrics cannot be calculated, they are NA (the classification
+    # rules treat NA conditions as FALSE)
+    cat("Trajectory metrics not calculated for one segment: ", e$message, "\n")
+    return(data.frame(sinuosity = NA_real_, straightness = NA_real_,
+                      ang_vector = NA_real_, ang_mean = NA_real_,
+                      Emax = NA_real_, sq_disp = NA_real_,
+                      dc_mean = NA_real_, dc_sd = NA_real_))
   })
   return(out)
 }
@@ -440,6 +467,13 @@ segment_class <- function (mode_segclust =  mode_segclust,
 equinox_interference <- function(df_seg = segments1, track = df_trip2,
                                  Sep_eq, Mar_eq, equinox_days = 20,
                                  score_factor = 0.5){
+  if (is.null(equinox_days)) {
+    # No equinox effect (data other than GLS)
+    return(df_seg %>%
+             dplyr::mutate(f_day = as.Date(track$date[begin]),
+                           l_day = as.Date(track$date[end]),
+                           Eq = FALSE))
+  }
   eq_dates <- c(seq(Sep_eq - days(equinox_days), Sep_eq + days(equinox_days), by = 'day'),
                 seq(Mar_eq - days(equinox_days), Mar_eq + days(equinox_days), by = 'day')
   )
@@ -691,7 +725,7 @@ plot_segmentation <- function(segclust = NULL, map = NULL,
 # track), track (one row per position) and plot (or NULL).
 
 classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
-                           adv, make_plots = FALSE) {
+                           adv, use_equinox = TRUE, make_plots = FALSE) {
 
   geo_trip <- info$geo_trip
   col.lon  <- info$Colony.lon
@@ -713,13 +747,21 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
   track_df <- track_df %>%
     mutate(lon = track$lon[pos], lat = track$lat[pos], R2n = x^2 + y^2)
 
-  # --- Equinoxes -------------------------------------------------------------
-  Sep_eq <- as.Date(paste0(start_year, '-09-21'))
-  Mar_eq <- as.Date(paste0(end_year, '-03-21'))
+  # --- Equinoxes (only GLS data) ---------------------------------------------
+  # First September and March equinoxes after the start of the track (this
+  # also works for tracks that do not start in summer, e.g. winter breeders)
+  next_date <- function(start, month_day) {
+    d <- as.Date(paste0(year(start), month_day))
+    if (d < as.Date(start)) d <- as.Date(paste0(year(start) + 1, month_day))
+    d
+  }
+  Sep_eq <- next_date(track$Date_Time[1], '-09-21')
+  Mar_eq <- next_date(track$Date_Time[1], '-03-21')
+  eq_days <- if (use_equinox) eq_window_days else NULL
 
   # --- Cleaning --------------------------------------------------------------
   track_df2 <- clean_positions(data = track_df, dist_threshold = adv$max_step)
-  track_df3 <- remove_duplicates(data = track_df2, equinox_days = eq_window_days,
+  track_df3 <- remove_duplicates(data = track_df2, equinox_days = eq_days,
                                  Sep_eq = Sep_eq, Mar_eq = Mar_eq,
                                  dup_threshold = adv$max_repeated,
                                  edge_positions = adv$edge_positions)
@@ -740,13 +782,15 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
                              adv = adv, lmin = lmin)
   segments2 <- equinox_interference(df_seg = segments1$df_clust,
                                     track = track_df3, Sep_eq, Mar_eq,
-                                    equinox_days = eq_window_days,
+                                    equinox_days = eq_days,
                                     score_factor = adv$eq_score_factor)
   segments3 <- segment_correction(df_seg = segments2, adv = adv) %>%
     mutate(Check = case_when(
       Confidence < adv$check_score ~ 'Check',
       Confidence >= adv$check_score & Eq & !(row_number() %in% c(1, n())) &
         (lag(Breed) != Breed | lead(Breed) != Breed) ~ 'Check',
+      # Direct change between breeding and wintering (no migration between)
+      (Breed == 'W' & lag(Breed) == 'B') | (Breed == 'B' & lag(Breed) == 'W') ~ 'Check',
       TRUE ~ 'Ok'))
   segments3 <- cbind(ID = geo_trip, Sp = info$Sp, segments3)
 
@@ -759,7 +803,11 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
                        n_seg_W = sum(segments3$Breed == 'W', na.rm = TRUE),
                        Confidence_0 = mean(segments2$Confidence, na.rm = TRUE)/3,
                        Confidence = mean(segments3$Confidence, na.rm = TRUE)/3,
-                       Metrics = paste(segments1$metrics, collapse = '-'))
+                       Metrics = paste(segments1$metrics, collapse = '-'),
+                       n_check = sum(segments3$Check == 'Check'),
+                       Direct_BW = any((segments3$Breed == 'W' & lag(segments3$Breed) == 'B') |
+                                         (segments3$Breed == 'B' & lag(segments3$Breed) == 'W'),
+                                       na.rm = TRUE))
 
   # --- Class of each position ------------------------------------------------
   track_df5 <- segclust2d::augment(mode_segclust) %>%
@@ -774,6 +822,7 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
     mutate(x_km = x, y_km = y, x = lon, y = lat) %>%
     dplyr::select(-lon, -lat) %>%
     mutate(Equinox = case_when(
+      !use_equinox ~ 'No',
       date >= (Sep_eq - days(eq_window_days)) &
         date <= (Sep_eq + days(eq_window_days)) ~ 'Sep',
       date >= (Mar_eq - days(eq_window_days)) &

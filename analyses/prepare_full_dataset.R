@@ -20,9 +20,10 @@
 #   Cleaning:
 #     1. The first and last 'fix_ends_n' positions are set at the colony
 #        (deployment and recovery; only the start in incomplete tracks).
-#     2. Calonectris: positions on colony days (identified from activity data
-#        in the SGAT script) are removed. On these days the logger is in the
-#        burrow and positions are wrong (often in Antarctica).
+#     2. Calonectris: positions on colony days (identified from light and
+#        wet-dry data) are moved to a random point near the colony. On these
+#        days the logger is in the burrow and positions are wrong (often in
+#        Antarctica), but the bird is at the colony.
 #     3. All species: positions outside a broad range of each species are
 #        removed. This removes the same kind of errors in the species without
 #        colony days information.
@@ -61,12 +62,17 @@ pufyel_dir <- file.path(out_dir, 'PUFYEL')
 check_dir <- file.path(out_dir, 'checks')
 dir.create(check_dir, recursive = TRUE, showWarnings = FALSE)
 
-# Colony days of Calonectris:
-#   'remove' main analysis: positions on colony days are removed
+# Colony days of Calonectris (days at the colony from light and wet-dry data;
+# GLS positions on these days are wrong because the logger is in the burrow):
+#   'random' main analysis: positions on colony days are moved to a random
+#            point within 'colony_radius_km' of the colony
 #   'anchor' as in the submitted paper: positions on colony days are set at
-#            the colony (confirmed days) or at 100 km (probable days)
+#            the colony (confirmed days) or at exactly 100 km (probable days)
+#   'remove' positions on colony days are removed
 #   'keep'   positions on colony days are kept (for sensitivity tests)
-calonectris_colony_days <- 'remove'
+calonectris_colony_days <- 'random'
+colony_radius_km <- 100
+set.seed(1)   # random points are the same every time the script is run
 
 # Start and end of the tracks: the logger is deployed and recovered at the
 # colony, so the first and last 'fix_ends_n' positions are set to the colony
@@ -250,6 +256,20 @@ if (length(missing_col) > 0) {
 # 4. CLEANING ----
 # =============================================================================
 
+# Random point within 'radius_km' of a point (uniform over the area of the
+# circle). Used for the positions on colony days.
+random_point <- function(lon, lat, radius_km) {
+  n     <- length(lon)
+  d     <- radius_km * sqrt(runif(n)) / 6371          # angular distance
+  b     <- runif(n, 0, 2 * pi)                       # bearing
+  rad   <- pi / 180
+  lat1  <- lat * rad; lon1 <- lon * rad
+  lat2  <- asin(sin(lat1) * cos(d) + cos(lat1) * sin(d) * cos(b))
+  lon2  <- lon1 + atan2(sin(b) * sin(d) * cos(lat1),
+                        cos(d) - sin(lat1) * sin(lat2))
+  list(lon = lon2 / rad, lat = lat2 / rad)
+}
+
 # Great-circle distance (km)
 dist_km <- function(lon1, lat1, lon2, lat2) {
   rad <- pi / 180
@@ -284,10 +304,23 @@ all_pos <- all_pos %>%
          # 2. Colony days (Calonectris)
          remove_cday = colony_day & !at_colony &
            calonectris_colony_days == 'remove',
-         # 3. Outside the range of the species
-         remove_range = !at_colony & !remove_cday &
-           (lon < lon_min | lon > lon_max | lat < lat_min | lat > lat_max)) %>%
+         move_cday = colony_day & !at_colony &
+           calonectris_colony_days == 'random') %>%
   ungroup()
+
+# 2b. Colony days moved to a random point near the colony (option 'random')
+if (any(all_pos$move_cday)) {
+  rp <- with(all_pos[all_pos$move_cday, ],
+             random_point(Colony.lon, Colony.lat, colony_radius_km))
+  all_pos$lon[all_pos$move_cday] <- rp$lon
+  all_pos$lat[all_pos$move_cday] <- rp$lat
+}
+
+# 3. Outside the range of the species (positions at or near the colony are
+#    never removed)
+all_pos <- all_pos %>%
+  mutate(remove_range = !at_colony & !move_cday & !remove_cday &
+           (lon < lon_min | lon > lon_max | lat < lat_min | lat > lat_max))
 
 # 4. Spikes (checked on the positions that remain after steps 2 and 3)
 all_pos <- all_pos %>%
@@ -296,13 +329,15 @@ if (!is.null(spike_km)) {
   keep <- !all_pos$remove_cday & !coalesce(all_pos$remove_range, FALSE)
   all_pos$remove_spike[keep] <- all_pos[keep, ] %>%
     group_by(geo_trip) %>%
-    mutate(spike = find_spikes(lon, lat, at_colony, spike_km, spike_window)) %>%
+    mutate(spike = find_spikes(lon, lat, at_colony | move_cday, spike_km,
+                               spike_window)) %>%
     pull(spike)
 }
 
 cleaning <- all_pos %>%
   group_by(Sp) %>%
   summarise(n_tracks = n_distinct(geo_trip), n_positions = n(),
+            moved_colony_days = sum(move_cday),
             removed_colony_days = sum(remove_cday),
             removed_out_of_range = sum(remove_range, na.rm = TRUE),
             removed_spikes = sum(remove_spike),
@@ -413,17 +448,20 @@ plot_track <- function(id) {
   d <- pos_before_cleaning %>%
     filter(geo_trip == id) %>%
     mutate(status = case_when(at_colony    ~ 'Fixed at colony',
+                              move_cday    ~ 'Colony day (moved)',
                               remove_cday  ~ 'Removed: colony day',
                               coalesce(remove_range, FALSE) ~ 'Removed: out of range',
                               remove_spike ~ 'Removed: spike',
                               TRUE         ~ 'Kept'),
            status = factor(status, levels = c('Kept', 'Fixed at colony',
+                                       'Colony day (moved)',
                                               'Removed: colony day',
                                               'Removed: out of range',
                                               'Removed: spike')))
-  kept <- filter(d, status %in% c('Kept', 'Fixed at colony'))
+  kept <- filter(d, status %in% c('Kept', 'Fixed at colony', 'Colony day (moved)'))
   info <- filter(metadata, geo_trip == id)
   cols <- c('Kept' = 'grey20', 'Fixed at colony' = 'orchid3',
+            'Colony day (moved)' = 'darkgreen',
             'Removed: colony day' = 'dodgerblue', 'Removed: out of range' = 'red',
             'Removed: spike' = 'orange')
   lims_x <- range(kept$lon) + c(-5, 5); lims_y <- range(kept$lat) + c(-5, 5)
@@ -447,7 +485,8 @@ plot_track <- function(id) {
   p_time <- ggplot(d_long, aes(Date_Time, value)) +
     geom_hline(data = col_ref, aes(yintercept = value), colour = 'orchid3',
                linetype = 'dashed') +
-    geom_line(data = filter(d_long, status %in% c('Kept', 'Fixed at colony')),
+    geom_line(data = filter(d_long, status %in% c('Kept', 'Fixed at colony',
+                                                  'Colony day (moved)')),
               colour = 'grey50', linewidth = 0.3) +
     geom_point(aes(colour = status), size = 0.6) +
     facet_wrap(~ coord, ncol = 1, scales = 'free_y') +
