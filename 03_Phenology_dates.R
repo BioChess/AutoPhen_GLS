@@ -35,19 +35,31 @@ source('parameters.R')
 # 2. SETTINGS OF THIS SCRIPT ----
 # =============================================================================
 
-# Use the same example data as in script 01: 'GLS' or 'GPS'
-example <- 'GLS'
-metadata_file <- paste0('input/', example, '_metadata_example.csv')
+# Data to analyse (the same as in script 01):
+#   'GLS'  example data: Cory's shearwater GLS tracks (input/)
+#   'GPS'  example data: Audouin's gull GPS track (input/)
+#   'full' full dataset of the paper (data/, not shared; created with
+#          analyses/prepare_full_dataset.R). Results are saved in output/full/
+dataset <- 'GLS'
+if (dataset == 'full') {
+  metadata_file  <- 'data/All_metadata.csv'
+  out_dir        <- 'output/full'
+} else {
+  metadata_file  <- paste0('input/', dataset, '_metadata_example.csv')
+  out_dir        <- 'output'
+}
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # Use the corrected classification (output of script 02)? If FALSE, the
 # automated classification of script 01 is used.
 use_corrected <- FALSE
-tracks_file <- ifelse(use_corrected, 'output/Phenology_tracks_corrected.csv',
-                      'output/Phenology_tracks.csv')
+tracks_file <- file.path(out_dir, ifelse(use_corrected,
+                                         'Phenology_tracks_corrected.csv',
+                                         'Phenology_tracks.csv'))
 
 # Save a map with the KDEs and dates of each track?
 save_plots <- TRUE
-plots_dir  <- 'output/plots/phenology'
+plots_dir  <- file.path(out_dir, 'plots', 'phenology')
 
 
 # =============================================================================
@@ -111,8 +123,8 @@ for (i in seq_along(ids)) {
 # =============================================================================
 
 phen_all <- bind_rows(phen_list)
-write_csv(phen_all, 'output/Phenology.csv')
-if (nrow(failed) > 0) write_csv(failed, 'output/Failed_tracks_03.csv')
+write_csv(phen_all, file.path(out_dir, 'Phenology.csv'))
+if (nrow(failed) > 0) write_csv(failed, file.path(out_dir, 'Failed_tracks_03.csv'))
 
 cat('\nFinished:', nrow(phen_all), 'tracks with dates,', nrow(failed),
     'failed.\n')

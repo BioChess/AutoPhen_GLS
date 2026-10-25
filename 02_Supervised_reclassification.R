@@ -505,9 +505,10 @@ server <- function(input, output, session) {
     track_all <- dplyr::bind_rows(rv$track_list, .id = "ID")
     seg_all2  <- dplyr::bind_rows(rv$segs_list,  .id = "ID")
     
-    dir.create("output", showWarnings = FALSE)
-    write_csv(track_all, "output/Phenology_tracks_corrected.csv")
-    write_csv(seg_all2,  "output/Segmentation_results_corrected.csv")
+    # Saved in the same folder as the input files (output/ or output/full/)
+    out_dir <- dirname(input$tracks_path)
+    write_csv(track_all, file.path(out_dir, "Phenology_tracks_corrected.csv"))
+    write_csv(seg_all2,  file.path(out_dir, "Segmentation_results_corrected.csv"))
     
     rv$status_msg <- paste0("💾 Exported: ",
                             nrow(track_all), " positions / ",

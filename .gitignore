@@ -26,3 +26,6 @@ gls_preprocessing/output/trn_bak/
 
 # Full datasets (not shared in the repository)
 data/
+
+# Results of the full dataset (not shared)
+output/full/

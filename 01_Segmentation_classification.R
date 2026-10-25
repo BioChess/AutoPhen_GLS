@@ -12,7 +12,8 @@
 # Input:  positions (one row per position: geo_trip, Date_Time, lon, lat)
 #         metadata  (one row per track: geo_trip, Ring, Sp, Colony,
 #                    Colony.lon, Colony.lat)
-# Output: output/Phenology_tracks.csv      (one row per position)
+# Output (in output/, or output/full/ for the full dataset):
+#         Phenology_tracks.csv             (one row per position)
 #         output/Segmentation_results.csv  (one row per segment)
 #         output/Summary_segmentation.csv  (one row per track)
 #         output/plots/segmentation/*.png  (optional maps)
@@ -36,22 +37,36 @@ source('parameters.R')
 # 2. SETTINGS OF THIS SCRIPT ----
 # =============================================================================
 
-# Example data: 'GLS' (Cory's shearwater, 7 tracks) or 'GPS' (Audouin's gull)
-example <- 'GLS'
-positions_file <- paste0('input/', example, '_positions_example.csv')
-metadata_file  <- paste0('input/', example, '_metadata_example.csv')
+# Data to analyse:
+#   'GLS'  example data: Cory's shearwater GLS tracks (input/)
+#   'GPS'  example data: Audouin's gull GPS track (input/)
+#   'full' full dataset of the paper (data/, not shared; created with
+#          analyses/prepare_full_dataset.R). Results are saved in output/full/
+dataset <- 'GLS'
+if (dataset == 'full') {
+  positions_file <- 'data/All_positions.csv'
+  metadata_file  <- 'data/All_metadata.csv'
+  out_dir        <- 'output/full'
+} else {
+  positions_file <- paste0('input/', dataset, '_positions_example.csv')
+  metadata_file  <- paste0('input/', dataset, '_metadata_example.csv')
+  out_dir        <- 'output'
+}
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # Save a map of the segmentation and classification of each track?
 save_plots <- TRUE
-plots_dir  <- 'output/plots/segmentation'
+plots_dir  <- file.path(out_dir, 'plots', 'segmentation')
 
 
 # =============================================================================
 # 3. READ DATA ----
 # =============================================================================
 
-metadata <- read_csv(metadata_file, show_col_types = FALSE)
-tracks   <- read_csv(positions_file, show_col_types = FALSE)
+metadata <- read_csv(metadata_file, show_col_types = FALSE,
+                     col_types = cols(geo_trip = 'c'))
+tracks   <- read_csv(positions_file, show_col_types = FALSE,
+                     col_types = cols(geo_trip = 'c'))
 
 if (save_plots) dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -109,10 +124,10 @@ seg_all     <- bind_rows(lapply(seg_list, function(d) mutate(d, ID = as.characte
 summary_all <- bind_rows(lapply(summary_list, function(d) mutate(d, ID = as.character(ID))))
 track_all   <- bind_rows(lapply(track_list, function(d) mutate(d, ID = as.character(ID))))
 
-write_csv(seg_all,     'output/Segmentation_results.csv')
-write_csv(summary_all, 'output/Summary_segmentation.csv')
-write_csv(track_all,   'output/Phenology_tracks.csv')
-if (nrow(failed) > 0) write_csv(failed, 'output/Failed_tracks_01.csv')
+write_csv(seg_all,     file.path(out_dir, 'Segmentation_results.csv'))
+write_csv(summary_all, file.path(out_dir, 'Summary_segmentation.csv'))
+write_csv(track_all,   file.path(out_dir, 'Phenology_tracks.csv'))
+if (nrow(failed) > 0) write_csv(failed, file.path(out_dir, 'Failed_tracks_01.csv'))
 
 cat('\nFinished:', length(track_list), 'tracks classified,', nrow(failed),
     'failed.\n')
