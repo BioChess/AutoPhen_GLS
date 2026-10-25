@@ -101,6 +101,7 @@ for (i in seq_along(ids)) {
       phenology_track(track.ph = track.ph, info = info,
                       min_stage_length = min_stage_length,
                       kde_level = kde_level, adv = adv,
+                      use_equinox = use_equinox,
                       world = world, make_plot = save_plots)),
     error = function(e) {
       message('  ERROR in track ', ids[i], ': ', conditionMessage(e))

@@ -279,11 +279,12 @@ for (k in names(ph_seg.list)) {
   }
   
   # Calculate KDE for non-migratory periods
-  KDE90_sf <- calculate_kde(ph_seg, proj = 4326, level = kde_level,
+  KDE90_sf <- calculate_kde(ph_seg, stage = k, proj = 4326, level = kde_level,
                             min_positions = adv$kde_min_positions,
                             bandwidth = adv$kde_bandwidth,
                             fallback_grid = adv$kde_fallback_grid,
-                            fallback_extent = adv$kde_fallback_extent)
+                            fallback_extent = adv$kde_fallback_extent,
+                            exclude_equinox = use_equinox)
   
   # Find first and last points inside KDE
   phen_dates <- find_dates(ph_seg, KDE90_sf, proj = 4326, stage = k)

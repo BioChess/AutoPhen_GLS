@@ -108,34 +108,51 @@ subset_to_kde <- function(data, column) {
 
 ################################################################################
 
-calculate_kde <- function(ph_seg, proj = 4326, level = 90, min_positions = 5,
-                          bandwidth = 'href', fallback_grid = 1000,
-                          fallback_extent = 4) {
-  # Filter non-migratory points
-  non_migratory <- ph_seg[!(ph_seg$Breed3 %in% c("mig1", "mig2")), ]
-  
-  if (nrow(non_migratory) <= min_positions) {
+calculate_kde <- function(ph_seg, stage, proj = 4326, level = 90,
+                          min_positions = 5, bandwidth = 'href',
+                          fallback_grid = 1000, fallback_extent = 4,
+                          exclude_equinox = TRUE) {
+  # Only the positions of this stage (ph_seg also contains the previous and
+  # next stages, which are needed to find the dates but not for the KDE)
+  stage_points <- ph_seg[ph_seg$Breed3 == stage, ]
+
+  # GLS: positions around the equinoxes have large latitude errors. They are
+  # not used for the KDE if enough positions remain.
+  if (exclude_equinox && 'Equinox' %in% names(stage_points)) {
+    no_eq <- stage_points[!stage_points$Equinox %in% 'Yes', ]
+    if (nrow(no_eq) > min_positions) stage_points <- no_eq
+  }
+
+  if (nrow(stage_points) <= min_positions) {
     # Not enough points for KDE
     return(NULL)
   }
-  
-  # Project tracks for KDE calculation
-  p_tracks <- projectTracks(dataGroup = non_migratory, projType = 'azim', custom = FALSE)
+
+  # Equal-area projection centred on the positions of the stage
+  p_tracks <- suppressMessages(
+    projectTracks(dataGroup = stage_points, projType = 'azim', custom = TRUE))
   hVals <- findScale(tracks = p_tracks, scaleARS = FALSE, sumTrips = NULL)
-  
+
   # Calculate KDE
   KDE <- estSpaceUse(tracks = p_tracks, scale = hVals[[bandwidth]], levelUD = level,
                      polyOut = TRUE)
   KDE90_sf <- KDE$UDPolygons
-   # mapKDE(KDE$UDPolygons)
-  # Handle alternative KDE calculation if KDE90_sf is NULL
+
+  # Alternative KDE calculation if estSpaceUse() fails: the grid extent is
+  # increased until the KDE fits in the grid
   if (is.null(KDE90_sf)) {
-    kuds <- kernelUD(p_tracks, h = (hVals[[bandwidth]] * 1000), grid = fallback_grid,
-                     extent = fallback_extent, same4all = FALSE)
-    KDE90 <- getverticeshr(kuds, percent = level)
+    for (ext in fallback_extent * c(1, 2, 4, 8)) {
+      KDE90 <- tryCatch({
+        kuds <- kernelUD(p_tracks, h = (hVals[[bandwidth]] * 1000),
+                         grid = fallback_grid, extent = ext, same4all = FALSE)
+        getverticeshr(kuds, percent = level)
+      }, error = function(e) NULL)
+      if (!is.null(KDE90)) break
+    }
+    if (is.null(KDE90)) return(NULL)
     KDE90_sf <- sf::st_transform(sf::st_as_sf(KDE90), crs = proj)
   }
-  
+
   return(KDE90_sf)
 }
 
@@ -152,9 +169,14 @@ find_dates <- function(ph_seg, KDE90_sf, proj = proj, stage) {
     st_as_sf(coords = c("Longitude", "Latitude"),
              crs = proj, agr = "constant", remove = FALSE)
   
-  # Filter ph_seg using KDE polygons
+  # Filter ph_seg using KDE polygons. Only the positions of this stage and of
+  # the migrations next to it are used: positions of a previous or next
+  # breeding/wintering stage can also fall inside the KDE (e.g. when the
+  # wintering area is close to the colony), but they are not part of this
+  # stage.
   KDE90_points <- st_filter(ph_seg_sf, KDE90_sf)
   KDE90_points <- st_drop_geometry(KDE90_points)
+  KDE90_points <- KDE90_points[KDE90_points$Breed3 %in% c(stage, 'mig1', 'mig2'), ]
   
   # Find departure and arrival points
   if (nrow(KDE90_points) == 0) {
@@ -376,7 +398,8 @@ extract_phen_dates <- function(results_list) {
 # Returns a list with: dates (one row with the phenological dates) and map.
 
 phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
-                            world = NULL, make_plot = FALSE) {
+                            use_equinox = TRUE, world = NULL,
+                            make_plot = FALSE) {
 
   track.ph <- track.ph %>% arrange(date)
   if (!'Equinox' %in% names(track.ph)) track.ph$Equinox <- 'No'
@@ -388,10 +411,11 @@ phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
   BW_periods <- unique(track.ph2$Breed3[grep("^B|^W", track.ph2$Breed3)])
   B_periods  <- grep("^B", BW_periods, value = TRUE)
   # If the track does not start with breeding, the first breeding stage is B2
+  # (all breeding stages are renumbered: B1 -> B2, B2 -> B3, ...)
   if (length(B_periods) > 0 && B_periods[1] == 'B1' &&
       track.ph2$Breed2[1] != 'B') {
-    track.ph2 <- track.ph2 %>%
-      mutate(Breed3 = ifelse(Breed3 == 'B1', 'B2', Breed3))
+    is_B <- grepl('^B[0-9]+$', track.ph2$Breed3)
+    track.ph2$Breed3[is_B] <- paste0('B', as.integer(sub('B', '', track.ph2$Breed3[is_B])) + 1)
   }
 
   track_f <- formatFields(dataGroup = track.ph2, fieldID = "ID",
@@ -414,11 +438,12 @@ phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
                                 dep_date = NA)
       next
     }
-    KDE90_sf <- calculate_kde(ph_seg, proj = 4326, level = kde_level,
+    KDE90_sf <- calculate_kde(ph_seg, stage = k, proj = 4326, level = kde_level,
                               min_positions = adv$kde_min_positions,
                               bandwidth = adv$kde_bandwidth,
                               fallback_grid = adv$kde_fallback_grid,
-                              fallback_extent = adv$kde_fallback_extent)
+                              fallback_extent = adv$kde_fallback_extent,
+                              exclude_equinox = use_equinox)
     phen_dates <- find_dates(ph_seg, KDE90_sf, proj = 4326, stage = k)
     results_list[[k]] <- c(list(KDE90_sf = KDE90_sf), phen_dates)
   }
