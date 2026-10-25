@@ -50,6 +50,9 @@ cal_dir <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/R
 # File with the Calonectris tracks used in the submitted paper (only the IDs
 # are used)
 cal_ids_file <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/Results/Phenology/Algorithm/CAL_subset_phenology_tracks_v9.5.csv'
+# Colony days of Calonectris (from light and wet-dry data). Only used for the
+# tracks without a '_rawpoints_cdays.csv' file
+colony_days_file <- 'C:/Users/Diego Vicente/Dropbox/Diego Vicente/TESIS/01_GLS_analysis/Raw Data/colony_days_v3.csv'
 
 out_dir   <- 'data'
 pufyel_dir <- file.path(out_dir, 'PUFYEL')
@@ -73,6 +76,7 @@ incomplete_tracks <- c(
   # Calonectris (from the '_cdays' files)
   '1605002002', '1644003001', '1644003002', '19084002001', 'BR50281001001',
   'BR50284001001', 'J459002001', 'X238001001', '1598002001', 'BR50345001001',
+  '2280003001',
   # Puffinus yelkouan (logger stopped on 16 March 2022)
   'BW101001001'
   # ADD incomplete tracks of the other species here
@@ -126,13 +130,31 @@ if (length(missing_cal) > 0) {
 }
 
 # Colony days: positions that differ between the '_rawpoints' and the
-# '_rawpoints_cdays' file of the same track
+# '_rawpoints_cdays' file of the same track. If there is no '_cdays' file,
+# the colony days are taken from 'colony_days_file' (days with light or
+# wet-dry evidence of being at the colony, the same rule as the SGAT script).
+colony_days <- read_csv(colony_days_file, show_col_types = FALSE,
+                        col_types = cols(geoID = 'c', geo_trip = 'c',
+                                         date = 'D')) %>%
+  filter(light %in% TRUE | wetdry %in% TRUE) %>%
+  distinct(geo_trip, date)
+
 read_cal <- function(f) {
   raw <- read_sgat_csv(f)
   f_cdays <- sub('_rawpoints\\.csv$', '_rawpoints_cdays.csv', f)
   if (!file.exists(f_cdays)) {
-    warning('No _cdays file for ', basename(f), ': colony days not identified')
-    return(mutate(raw, colony_day = FALSE))
+    id <- raw$geo_trip[1]
+    cday_dates <- colony_days$date[colony_days$geo_trip == id]
+    if (length(cday_dates) == 0) {
+      warning('No colony days found for ', id)
+    } else {
+      message('No _cdays file for ', id, ': colony days from ',
+              basename(colony_days_file))
+    }
+    if (calonectris_colony_days == 'anchor') {
+      warning('Positions of ', id, ' not anchored (no _cdays file)')
+    }
+    return(mutate(raw, colony_day = as.Date(Date_Time) %in% cday_dates))
   }
   cdays <- read_sgat_csv(f_cdays)
   if (nrow(cdays) != nrow(raw) || any(cdays$Date_Time != raw$Date_Time)) {
@@ -256,6 +278,8 @@ gaps <- all_pos %>%
   summarise(max_gap_days = round(max(as.numeric(diff(Date_Time), units = 'days')), 1),
             .groups = 'drop')
 
+pos_before_cleaning <- all_pos   # kept for the plots of each track (6.5)
+
 all_pos <- all_pos %>%
   filter(!remove_cday, !coalesce(remove_range, FALSE))
 
@@ -341,6 +365,78 @@ map_all <- ggplot() +
   theme_bw() + theme(legend.position = 'none')
 ggsave(file.path(check_dir, 'map_all_tracks.png'), map_all,
        width = 30, height = 20, units = 'cm', dpi = 150)
+
+
+# --- 6.5. Plot of each track ------------------------------------------------------
+# Map, longitude and latitude of each track, with the positions removed in the
+# cleaning. Only for the species in 'plot_species' (NULL: no plots).
+plot_species <- c('PUFPUF', 'PUFYEL', 'HYDCAS', 'HYDJAB')
+
+plot_track <- function(id) {
+  d <- pos_before_cleaning %>%
+    filter(geo_trip == id) %>%
+    mutate(status = case_when(at_colony    ~ 'Fixed at colony',
+                              remove_cday  ~ 'Removed: colony day',
+                              coalesce(remove_range, FALSE) ~ 'Removed: out of range',
+                              TRUE         ~ 'Kept'),
+           status = factor(status, levels = c('Kept', 'Fixed at colony',
+                                              'Removed: colony day',
+                                              'Removed: out of range')))
+  kept <- filter(d, status %in% c('Kept', 'Fixed at colony'))
+  info <- filter(metadata, geo_trip == id)
+  cols <- c('Kept' = 'grey20', 'Fixed at colony' = 'orchid3',
+            'Removed: colony day' = 'dodgerblue', 'Removed: out of range' = 'red')
+  lims_x <- range(kept$lon) + c(-5, 5); lims_y <- range(kept$lat) + c(-5, 5)
+
+  p_map <- ggplot() +
+    geom_sf(data = world, fill = 'grey85', colour = 'grey60', linewidth = 0.1) +
+    geom_path(data = kept, aes(lon, lat), colour = 'grey50', linewidth = 0.3) +
+    geom_point(data = d, aes(lon, lat, colour = status), size = 0.8) +
+    geom_point(data = info, aes(Colony.lon, Colony.lat), shape = 23, size = 3,
+               fill = 'orchid3') +
+    coord_sf(xlim = lims_x, ylim = lims_y) +
+    scale_colour_manual(values = cols, drop = FALSE) +
+    labs(x = NULL, y = NULL, colour = NULL) +
+    theme_bw() + theme(legend.position = 'bottom')
+
+  d_long <- d %>%
+    dplyr::select(Date_Time, lon, lat, status) %>%
+    pivot_longer(c(lon, lat), names_to = 'coord', values_to = 'value')
+  col_ref <- tibble(coord = c('lon', 'lat'),
+                    value = c(info$Colony.lon, info$Colony.lat))
+  p_time <- ggplot(d_long, aes(Date_Time, value)) +
+    geom_hline(data = col_ref, aes(yintercept = value), colour = 'orchid3',
+               linetype = 'dashed') +
+    geom_line(data = filter(d_long, status %in% c('Kept', 'Fixed at colony')),
+              colour = 'grey50', linewidth = 0.3) +
+    geom_point(aes(colour = status), size = 0.6) +
+    facet_wrap(~ coord, ncol = 1, scales = 'free_y') +
+    scale_colour_manual(values = cols, drop = FALSE) +
+    labs(x = NULL, y = NULL) +
+    theme_bw() + theme(legend.position = 'none')
+
+  (p_map | p_time) +
+    plot_layout(widths = c(1, 1.3)) +
+    plot_annotation(title = paste0(id, ' - ', info$Sp, ' - ', info$Colony,
+                                   ifelse(info$incomplete, ' (incomplete)', '')),
+                    subtitle = paste0(format(info$start_date, '%Y-%m-%d'), ' to ',
+                                      format(info$end_date, '%Y-%m-%d'),
+                                      ' | start/end distance to colony: ',
+                                      info$start_dist_km, ' / ', info$end_dist_km,
+                                      ' km'))
+}
+
+if (length(plot_species) > 0) {
+  pacman::p_load('patchwork')
+  for (sp in plot_species) {
+    sp_dir <- file.path(check_dir, 'tracks', sp)
+    dir.create(sp_dir, recursive = TRUE, showWarnings = FALSE)
+    for (id in metadata$geo_trip[metadata$Sp == sp]) {
+      ggsave(file.path(sp_dir, paste0(id, '.png')), plot_track(id),
+             width = 30, height = 15, units = 'cm', dpi = 120)
+    }
+  }
+}
 
 
 # =============================================================================
