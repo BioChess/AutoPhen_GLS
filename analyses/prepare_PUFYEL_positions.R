@@ -21,7 +21,16 @@
 # 1. PACKAGES, FUNCTIONS AND SETTINGS ----
 # =============================================================================
 
-pacman::p_load('tidyverse', 'lubridate', 'SGAT', 'patchwork', 'ggplot2',
+# SGAT is only on GitHub. It is installed by 00_setup.R only when
+# install_gls_preprocessing <- TRUE, so it is installed here if missing
+# (same version as in 00_setup.R; on Windows it needs Rtools).
+if (!requireNamespace('SGAT', quietly = TRUE)) {
+  if (!requireNamespace('remotes', quietly = TRUE)) install.packages('remotes')
+  remotes::install_github('SWotherspoon/SGAT@d0894847fb9b', upgrade = 'never')
+}
+library(SGAT)
+
+pacman::p_load('tidyverse', 'lubridate', 'patchwork', 'ggplot2',
                'rnaturalearth', 'rnaturalearthdata')
 
 # calc_tol() and plot_SGAT()
@@ -90,7 +99,7 @@ for (f in trn_files) {
 
   # Check: zenith observed at the colony during the first 14 days
   first14 <- twl %>% filter(Twilight < min(Twilight) + days(14))
-  z_col <- zenith(solar(first14$Twilight), col_lon, col_lat)
+  z_col <- SGAT::zenith(SGAT::solar(first14$Twilight), col_lon, col_lat)
   cat('  Zenith at the colony (first 14 days): median', round(median(z_col), 1),
       '| standard zenith used:', zenith_standard, '\n')
 
@@ -107,14 +116,14 @@ for (f in trn_files) {
     split_date <- as.POSIXct(paste0(end_year, '-01-01'), tz = 'UTC')
     twl_1  <- twl %>% filter(Twilight <= split_date)
     twl_2  <- twl %>% filter(Twilight >  split_date)
-    path_1 <- thresholdPath(twl_1$Twilight, twl_1$Rise,
+    path_1 <- SGAT::thresholdPath(twl_1$Twilight, twl_1$Rise,
                             zenith = zenith_standard, tol = tol_res$tol_sep)
-    path_2 <- thresholdPath(twl_2$Twilight, twl_2$Rise,
+    path_2 <- SGAT::thresholdPath(twl_2$Twilight, twl_2$Rise,
                             zenith = zenith_standard, tol = tol_res$tol_mar)
     x0   <- rbind(path_1$x, path_2$x)
     time <- c(path_1$time, path_2$time)
   } else {
-    path <- thresholdPath(twl$Twilight, twl$Rise,
+    path <- SGAT::thresholdPath(twl$Twilight, twl$Rise,
                           zenith = zenith_standard, tol = tol_res$tol_sep)
     x0   <- path$x
     time <- path$time
