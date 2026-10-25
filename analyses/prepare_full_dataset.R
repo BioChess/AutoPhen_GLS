@@ -26,6 +26,8 @@
 #     3. All species: positions outside a broad range of each species are
 #        removed. This removes the same kind of errors in the species without
 #        colony days information.
+#     4. All species: spikes (short jumps far from the track that come back
+#        after one to three positions) are removed.
 #
 #   Output (folder 'data/', NOT uploaded to GitHub):
 #     - data/All_positions.csv   one row per position: geo_trip, Date_Time, lon, lat
@@ -77,6 +79,8 @@ incomplete_tracks <- c(
   '1605002002', '1644003001', '1644003002', '19084002001', 'BR50281001001',
   'BR50284001001', 'J459002001', 'X238001001', '1598002001', 'BR50345001001',
   '2280003001',
+  # Puffinus puffinus (logger stopped a few days before the return)
+  'BD732001001', '19205001001',
   # Puffinus yelkouan (logger stopped on 16 March 2022)
   'BW101001001'
   # ADD incomplete tracks of the other species here
@@ -85,6 +89,12 @@ incomplete_tracks <- c(
 # Tracks excluded from the analysis (and reason)
 exclude_tracks <- c('CJ636001',    # HYDCAS, Egg Island: not used in the paper
                     'BR928001001') # CALEDW, Montana Clara: not used in the paper
+
+# Spikes: positions more than 'spike_km' away from the running median of the
+# 'spike_window' surrounding positions (odd number; 7 = 3.5 days with two
+# positions per day) are removed (all species). NULL: no spike filter.
+spike_km     <- 1000
+spike_window <- 7
 
 # Species codes, names and broad range (decimal degrees). Positions outside
 # the range are removed. The range is broad on purpose (it includes the GLS
@@ -240,6 +250,25 @@ if (length(missing_col) > 0) {
 # 4. CLEANING ----
 # =============================================================================
 
+# Great-circle distance (km)
+dist_km <- function(lon1, lat1, lon2, lat2) {
+  rad <- pi / 180
+  6371 * acos(pmin(1, sin(lat1 * rad) * sin(lat2 * rad) +
+                     cos(lat1 * rad) * cos(lat2 * rad) * cos((lon2 - lon1) * rad)))
+}
+
+# Spikes: positions that are more than 'spike_km' away from the running
+# median of the surrounding positions ('spike_window' positions centred on
+# each one). The running median follows the real movement of the bird (also
+# during fast migration), but not short jumps of one to three positions that
+# come back. Positions fixed at the colony are never removed.
+find_spikes <- function(lon, lat, fixed, spike_km, spike_window) {
+  if (length(lon) < spike_window) return(rep(FALSE, length(lon)))
+  lon_med <- runmed(lon, k = spike_window, endrule = 'median')
+  lat_med <- runmed(lat, k = spike_window, endrule = 'median')
+  dist_km(lon, lat, lon_med, lat_med) > spike_km & !fixed
+}
+
 all_pos <- all_pos %>%
   left_join(colonies %>% dplyr::select(Colony, Colony.lat, Colony.lon),
             by = 'Colony') %>%
@@ -260,14 +289,27 @@ all_pos <- all_pos %>%
            (lon < lon_min | lon > lon_max | lat < lat_min | lat > lat_max)) %>%
   ungroup()
 
+# 4. Spikes (checked on the positions that remain after steps 2 and 3)
+all_pos <- all_pos %>%
+  mutate(remove_spike = FALSE)
+if (!is.null(spike_km)) {
+  keep <- !all_pos$remove_cday & !coalesce(all_pos$remove_range, FALSE)
+  all_pos$remove_spike[keep] <- all_pos[keep, ] %>%
+    group_by(geo_trip) %>%
+    mutate(spike = find_spikes(lon, lat, at_colony, spike_km, spike_window)) %>%
+    pull(spike)
+}
+
 cleaning <- all_pos %>%
   group_by(Sp) %>%
   summarise(n_tracks = n_distinct(geo_trip), n_positions = n(),
             removed_colony_days = sum(remove_cday),
             removed_out_of_range = sum(remove_range, na.rm = TRUE),
+            removed_spikes = sum(remove_spike),
             .groups = 'drop') %>%
   mutate(percent_removed = round(100 * (removed_colony_days +
-                                          removed_out_of_range) / n_positions, 1))
+                                          removed_out_of_range +
+                                          removed_spikes) / n_positions, 1))
 print(cleaning)
 write_csv(cleaning, file.path(check_dir, 'cleaning_summary.csv'))
 
@@ -281,7 +323,7 @@ gaps <- all_pos %>%
 pos_before_cleaning <- all_pos   # kept for the plots of each track (6.5)
 
 all_pos <- all_pos %>%
-  filter(!remove_cday, !coalesce(remove_range, FALSE))
+  filter(!remove_cday, !coalesce(remove_range, FALSE), !remove_spike)
 
 
 # =============================================================================
@@ -310,11 +352,6 @@ metadata <- all_pos %>%
 # =============================================================================
 
 # --- 6.1. Distance to the colony at the start and end of each track ----------
-dist_km <- function(lon1, lat1, lon2, lat2) {
-  rad <- pi / 180
-  6371 * acos(pmin(1, sin(lat1 * rad) * sin(lat2 * rad) +
-                     cos(lat1 * rad) * cos(lat2 * rad) * cos((lon2 - lon1) * rad)))
-}
 
 # Median of the first/last 10 positions that were not fixed at the colony:
 # large distances suggest incomplete tracks
@@ -378,14 +415,17 @@ plot_track <- function(id) {
     mutate(status = case_when(at_colony    ~ 'Fixed at colony',
                               remove_cday  ~ 'Removed: colony day',
                               coalesce(remove_range, FALSE) ~ 'Removed: out of range',
+                              remove_spike ~ 'Removed: spike',
                               TRUE         ~ 'Kept'),
            status = factor(status, levels = c('Kept', 'Fixed at colony',
                                               'Removed: colony day',
-                                              'Removed: out of range')))
+                                              'Removed: out of range',
+                                              'Removed: spike')))
   kept <- filter(d, status %in% c('Kept', 'Fixed at colony'))
   info <- filter(metadata, geo_trip == id)
   cols <- c('Kept' = 'grey20', 'Fixed at colony' = 'orchid3',
-            'Removed: colony day' = 'dodgerblue', 'Removed: out of range' = 'red')
+            'Removed: colony day' = 'dodgerblue', 'Removed: out of range' = 'red',
+            'Removed: spike' = 'orange')
   lims_x <- range(kept$lon) + c(-5, 5); lims_y <- range(kept$lat) + c(-5, 5)
 
   p_map <- ggplot() +
