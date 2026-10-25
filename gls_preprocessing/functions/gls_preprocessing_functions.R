@@ -255,7 +255,7 @@ calc_tol <- function(twl, zenith, n = 0.001, Sep_eq, Mar_eq, d,
   }
 
   tol_df <- as.data.frame(m) %>%
-    mutate(across(c(dif.lat, dif.lat.sep, dif.lat.mar), round, digits = 2),
+    mutate(across(c(dif.lat, dif.lat.sep, dif.lat.mar), \(x) round(x, digits = 2)),
            dec_sep = lag(dif.lat.sep) - dif.lat.sep,
            dec_mar = lag(dif.lat.mar) - dif.lat.mar)
 
