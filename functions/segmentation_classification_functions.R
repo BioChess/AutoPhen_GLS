@@ -125,8 +125,9 @@ remove_duplicates <- function(data, equinox_days = 20,
 ################################################################################
 # agreement_score(): agreement between the class of each segment and its
 # movement metrics (0-1). Breeding and wintering segments are expected to be
-# tortuous (straightness < 0.5, ang_vector < 0.5, sinuosity > 1) and
-# migration segments the opposite. The score is the proportion of these three
+# tortuous and slow (straightness < 0.5, ang_vector < 0.5, sinuosity > 1,
+# mean step length not much larger than the median of the track) and
+# migration segments the opposite. The score is the proportion of these four
 # criteria that agree with the class. It is 0 for impossible classes:
 # breeding far from the colony (NSCD above the limit), wintering near the
 # colony, or migration with very low straightness and ang_vector.
@@ -134,12 +135,15 @@ remove_duplicates <- function(data, equinox_days = 20,
 # segment is for its class, not the probability that the class is correct.
 
 agreement_score <- function(df_seg, R2n, adv) {
+  speed_ref <- median(df_seg$mu.dist, na.rm = TRUE)
   stationary <- (df_seg$straightness < adv$score_straightness) +
     (df_seg$ang_vector < adv$score_ang_vector) +
-    (df_seg$sinuosity > adv$score_sinuosity)
+    (df_seg$sinuosity > adv$score_sinuosity) +
+    (df_seg$mu.dist <= adv$score_speed * speed_ref)
   moving <- (df_seg$straightness > adv$score_straightness) +
     (df_seg$ang_vector > adv$score_ang_vector) +
-    (df_seg$sinuosity < adv$score_sinuosity)
+    (df_seg$sinuosity < adv$score_sinuosity) +
+    (df_seg$mu.dist > adv$score_speed * speed_ref)
   n_agree <- ifelse(df_seg$Breed %in% c('B', 'W'), stationary, moving)
 
   impossible <- with(df_seg,
@@ -148,9 +152,29 @@ agreement_score <- function(df_seg, R2n, adv) {
     (Breed == 'mig' & straightness < adv$impossible_straightness &
        ang_vector < adv$impossible_ang_vector))
 
-  score <- n_agree / 3
+  score <- n_agree / 4
   score[dplyr::coalesce(impossible, FALSE)] <- 0
   round(score, 3)
+}
+
+################################################################################
+# fast_w_to_mig(): wintering segments at the start or end of the wintering
+# stage that are much faster than the main (longest) wintering segment are
+# reclassified as migration. Only consecutive segments from the edge are
+# changed, so the core of the wintering stage is never changed.
+
+fast_w_to_mig <- function(df_seg, adv) {
+  b <- df_seg$Breed
+  w <- which(b == 'W')
+  if (length(w) < 2) return(b)
+  core <- w[which.max((df_seg$end - df_seg$begin)[w])]
+  fast <- dplyr::coalesce(df_seg$mu.dist > adv$fast_w_ratio * df_seg$mu.dist[core] &
+                            df_seg$mu.dist > adv$fast_w_min, FALSE)
+  lo <- core; while (lo > 1 && b[lo - 1] == 'W') lo <- lo - 1
+  hi <- core; while (hi < length(b) && b[hi + 1] == 'W') hi <- hi + 1
+  i <- lo; while (i < core && fast[i]) { b[i] <- 'mig'; i <- i + 1 }
+  i <- hi; while (i > core && fast[i]) { b[i] <- 'mig'; i <- i - 1 }
+  b
 }
 
 ################################################################################
@@ -591,6 +615,10 @@ segment_correction <- function(df_seg = segments2, adv){
                                    sinuosity < adv$corr_sinuosity &
                                    straightness > adv$corr_straightness), 'mig', Breed))
   
+  # Fast wintering segments at the start or end of the wintering stage
+  # (e.g. a loop before the return migration) → migration
+  segs7$Breed <- fast_w_to_mig(segs7, adv)
+
   # Impsible situations
   out <- segs7 %>%
     mutate(

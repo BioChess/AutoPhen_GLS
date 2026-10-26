@@ -92,8 +92,8 @@ adv <- list(
   nscd_ncluster     = 3,    # clusters for the segmentation of NSCD
 
   # --- 2.3. Trajectory metrics [P15, P16] -------------------------------------
-  core_metrics      = c("straightness", "sinuosity", "ang_vector"),
-  extra_metrics     = c("mu.dist", "sd.dist", "Emax", "sq_disp",
+  core_metrics      = c("straightness", "sinuosity", "ang_vector", "mu.dist"),
+  extra_metrics     = c("sd.dist", "Emax", "sq_disp",
                         "R2n_sd", "dc_mean", "dc_sd"),
   paired_metrics    = list(mu_xy  = c("mu.x", "mu.y"),
                            sd_xy  = c("sd.x", "sd.y"),
@@ -113,14 +113,16 @@ adv <- list(
 
   # --- 2.6. Agreement score [P22, P24] ----------------------------------------
   # Agreement between the class of a segment and its movement metrics:
-  # Breeding/wintering: straightness < 0.5, ang_vector < 0.5, sinuosity > 1
-  # Migration: the opposite. Agreement = proportion of criteria met (0, 1/3,
-  # 2/3 or 1); 0 for impossible classes (see agreement_score()).
+  # Breeding/wintering: straightness < 0.5, ang_vector < 0.5, sinuosity > 1,
+  #   mean step length (mu.dist) <= 1.5 x median step length of the track
+  # Migration: the opposite. Agreement = proportion of criteria met (0, 0.25,
+  # 0.5, 0.75 or 1); 0 for impossible classes (see agreement_score()).
   # Sinuosity is dimensionless (see trajmetrics()): sinuosity > 1 means that
   # the mean cosine of turning angles is lower than 0.6.
   score_straightness = 0.5,
   score_ang_vector   = 0.5,
   score_sinuosity    = 1,
+  score_speed        = 1.5,
   impossible_straightness = 0.2,  # migration with lower straightness and
   impossible_ang_vector   = 0.9,  #   lower ang_vector → agreement 0
 
@@ -133,9 +135,14 @@ adv <- list(
   corr_straightness = 0.2,
   corr_score        = 0.5,  # agreement (0-1)
   corr_sinuosity    = 1,
+  # Fast wintering segments at the start or end of the wintering stage →
+  # migration: mean step length > fast_w_ratio x that of the main wintering
+  # segment and > fast_w_min (km between consecutive positions)
+  fast_w_ratio      = 2.75,
+  fast_w_min        = 250,
 
   # --- 2.9. Segments to review [P34] ------------------------------------------
-  check_score       = 0.6,  # segments with lower agreement (0 or 1/3) are
+  check_score       = 0.5,  # segments with lower agreement (0 or 0.25) are
                             #   flagged 'Check'
   w_far_km          = 1000, # wintering segments farther than this from the
                             #   main wintering segment are flagged 'Check'
