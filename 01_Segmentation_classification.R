@@ -42,11 +42,11 @@ source('parameters.R')
 #   'GPS'  example data: Audouin's gull GPS track (input/)
 #   'full' full dataset of the paper (data/, not shared; created with
 #          analyses/prepare_full_dataset.R). Results are saved in output/full/
-dataset <- 'GLS'
+dataset <- 'full'
 if (dataset == 'full') {
   positions_file <- 'data/All_positions.csv'
   metadata_file  <- 'data/All_metadata.csv'
-  out_dir        <- 'output/full'
+  out_dir        <- 'output/full_Kmax25'
 } else {
   positions_file <- paste0('input/', dataset, '_positions_example.csv')
   metadata_file  <- paste0('input/', dataset, '_metadata_example.csv')
