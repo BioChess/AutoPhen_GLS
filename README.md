@@ -50,6 +50,7 @@ AutoPhen_GLS/
 ├── output/                             Results
 ├── simulations/                        Simulated tracks with known phenology (validation)
 ├── analyses/                           Code to reproduce the analyses, tables and figures of the paper
+├── docs/                               Description of the classification rules
 └── gls_preprocessing/                  Optional: example of how GLS positions were obtained from raw light data
 ```
 
@@ -130,6 +131,8 @@ All settings are in `parameters.R`, which is loaded by scripts 01 and 03. It has
 - **Advanced parameters**: thresholds of the classification rules. They are part of the method and are listed to make it transparent, but most users should not change them.
 
 Phenological dates are defined as: **arrival** = first position inside the KDE of the breeding or wintering area; **departure** = first position outside the KDE after the last position inside it.
+
+All classification rules and thresholds are described step by step in [`docs/Classification_rules.md`](docs/Classification_rules.md).
 
 ---
 
