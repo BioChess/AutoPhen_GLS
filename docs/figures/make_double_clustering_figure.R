@@ -13,13 +13,18 @@ col_W <- '#4682B4'   # wintering (blue)
 
 # --- 1. Distance to the colony of an example track ----------------------------
 # Positions of the example track after step 1 (output of script 01): x_km and
-# y_km are projected coordinates centred on the colony
-id  <- '11001001'
+# y_km are projected coordinates centred on the colony. As the figure is only
+# illustrative, the distance is smoothed with a running median (9 positions,
+# 4.5 days) and a running mean (3 positions).
+id  <- '19001001'
 trk <- read_csv('output/Phenology_tracks.csv', show_col_types = FALSE,
                 col_types = cols(ID = 'c')) %>%
   filter(ID == id) %>%
-  mutate(dist_km = sqrt(x_km^2 + y_km^2)) %>%
-  arrange(date)
+  arrange(date) %>%
+  mutate(dist_km = sqrt(x_km^2 + y_km^2),
+         dist_km = runmed(dist_km, k = 9, endrule = 'median'),
+         dist_km = as.numeric(stats::filter(dist_km, rep(1 / 3, 3), sides = 2)),
+         dist_km = coalesce(dist_km, sqrt(x_km^2 + y_km^2)))
 
 p_dist <- ggplot(trk, aes(date, dist_km, colour = dist_km)) +
   geom_line(linewidth = 0.9) +
@@ -35,9 +40,10 @@ tab <- data.frame(
   Straightness = c('≤ 0.5', '> 0.5'),
   `Mean vector of\nturning angles` = c('≤ 0.5', '> 0.5'),
   Sinuosity = c('≥ 1', '< 1'),
-  `Speed (mean\nstep length)` = c('≤ 1.5 × median', '> 1.5 × median'),
+  `Speed\n(mean step length)` = c('≤ 1.5 × median', '> 1.5 × median'),
   check.names = FALSE)
 tt <- ttheme_minimal(
+  padding = unit(c(7, 5), 'mm'),
   core    = list(fg_params = list(fontsize = 11, fontfamily = font),
                  bg_params = list(fill = 'grey95', col = 'black')),
   colhead = list(fg_params = list(fontsize = 11, fontface = 'bold', fontfamily = font),
@@ -72,19 +78,17 @@ p_diag <- ggplot() +
   seg(xB, 5.2, xB, 3.6) + seg(xW, 5.2, xW, 4.4) + seg(xM, 5.2, xM, 4.4) +
   seg(xW, 4.4, xM, 4.4) + seg(6.5, 4.4, 6.5, 3.6) + seg(xB, 3.6, 6.5, 3.6) +
   seg(4.25, 3.6, 4.25, 3.0) +
-  box(6.5, 9.4, 4.2, 1.6, 'Stationary vs\nmigration') +
-  box(xB, 5.8, 2.6, 1.0, 'Breeding', col = col_B, border = 'darkgreen',
-      fill = 'grey95', size = 5.5) +
-  box(xW, 5.8, 2.6, 1.0, 'Wintering', col = col_W, border = 'darkgreen',
-      fill = 'grey95', size = 5.5) +
-  box(xM, 5.8, 2.6, 1.0, 'Migration', border = 'darkgreen', fill = 'grey95',
+  box(6.5, 9.4, 4.2, 1.6, 'Stationary vs\nMigration') +
+  box(xB, 5.8, 2.6, 1.0, 'Breeding', col = col_B, fill = 'grey95', size = 5.5) +
+  box(xW, 5.8, 2.6, 1.0, 'Wintering', col = col_W, fill = 'grey95', size = 5.5) +
+  box(xM, 5.8, 2.6, 1.0, 'Migration', fill = 'grey95',
       size = 5.5) +
-  box(4.25, 2.2, 4.2, 1.6, 'Breeding vs\nnon-breeding') +
+  box(4.25, 2.2, 4.2, 1.6, 'Breeding vs\nNon-breeding') +
   coord_cartesian(xlim = c(0.5, 9.5), ylim = c(1.2, 10.4), expand = FALSE) +
   theme_void()
 
 # --- 4. Combine and save ------------------------------------------------------
-fig <- (p_tab / p_dist + plot_layout(heights = c(1, 2.2))) | p_diag
-fig <- fig + plot_layout(widths = c(1, 1.15))
-ggsave('docs/figures/double_clustering.png', fig, width = 30, height = 16,
+fig <- (p_tab / p_dist + plot_layout(heights = c(1.3, 2.2))) | p_diag
+fig <- fig + plot_layout(widths = c(1.2, 1))
+ggsave('docs/figures/double_clustering.png', fig, width = 34, height = 17,
        units = 'cm', dpi = 200, bg = 'white', device = ragg::agg_png)
