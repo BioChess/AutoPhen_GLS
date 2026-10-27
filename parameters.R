@@ -144,9 +144,6 @@ adv <- list(
   # --- 2.9. Segments to review [P34] ------------------------------------------
   check_score       = 0.5,  # segments with lower agreement (0 or 0.25) are
                             #   flagged 'Check'
-  w_far_km          = 1000, # wintering segments farther than this from the
-                            #   main wintering segment are flagged 'Check'
-                            #   (possible stopovers or migration loops)
 
   # --- 2.10. Kernel density estimation [P38, P40, P42] ------------------------
   kde_min_positions = 5,    # minimum positions to calculate a KDE

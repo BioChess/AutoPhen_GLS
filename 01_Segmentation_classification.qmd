@@ -229,7 +229,7 @@ segments3 <- segment_correction(df_seg = segments2, adv = adv)
 
 # Segments to review ('Check') and the reasons: low agreement, corrected by
 # the rules, change of stage in an equinox window, direct change between
-# breeding and wintering, wintering segment far from the main wintering area
+# breeding and wintering
 segments3 <- flag_segments(segments3, adv = adv)
 segments3 <- cbind(ID = geo_trip, Sp = sp, segments3)
 

@@ -183,8 +183,6 @@ fast_w_to_mig <- function(df_seg, adv) {
 #   corrected       class changed by the correction rules
 #   equinox         change of stage within an equinox window (GLS)
 #   direct B-W      change between breeding and wintering without migration
-#   far W           wintering segment more than adv$w_far_km away from the
-#                   main (longest) wintering segment (stopover or loop?)
 
 flag_segments <- function(df_seg, adv) {
   n <- nrow(df_seg)
@@ -195,21 +193,11 @@ flag_segments <- function(df_seg, adv) {
     (df_seg$Breed == 'B' & dplyr::lag(df_seg$Breed) == 'W')
   direct <- dplyr::coalesce(direct, FALSE)
 
-  far_W <- rep(FALSE, n)
-  w <- which(df_seg$Breed == 'W')
-  if (length(w) > 1) {
-    core <- w[which.max((df_seg$end - df_seg$begin)[w])]
-    d <- sqrt((df_seg$mu.x - df_seg$mu.x[core])^2 +
-                (df_seg$mu.y - df_seg$mu.y[core])^2)
-    far_W <- df_seg$Breed == 'W' & d > adv$w_far_km
-  }
-
   reasons <- cbind(
     'low agreement' = dplyr::coalesce(df_seg$Agreement < adv$check_score, FALSE),
     'corrected'     = df_seg$Breed != df_seg$Breed_0,
     'equinox'       = df_seg$Eq & change,
-    'direct B-W'    = direct,
-    'far W'         = far_W)
+    'direct B-W'    = direct)
   df_seg$Check_reason <- apply(reasons, 1, function(r) paste(colnames(reasons)[r], collapse = '; '))
   df_seg$Check <- ifelse(df_seg$Check_reason == '', 'Ok', 'Check')
   df_seg

@@ -203,7 +203,6 @@ flagged **Check** if at least one of these reasons applies (column
 | corrected | the class was changed in step 7 |
 | equinox | GLS only: the segment overlaps an equinox window and there is a change of stage before or after it |
 | direct B-W | change between breeding and wintering without migration between them |
-| far W | wintering segment more than `adv$w_far_km` (1000 km) from the main wintering segment |
 
 ---
 
