@@ -15,39 +15,38 @@ x² + y² (km²).
 
 ## Overview
 
-| Step | What is done | Script |
-|---|---|---|
-| 1 | Preparation of the track: projection, outliers, repeated positions | 01 |
-| 2 | Segmentation of the track (`segclust2d`) | 01 |
-| 3 | Movement metrics of each segment | 01 |
-| 4 | Two clusterings of the segments: movement mode and distance to the colony | 01 |
-| 5 | Initial class of each segment | 01 |
-| 6 | Agreement score and selection of the best combination of metrics | 01 |
-| 7 | Corrections: equinox, distance, speed and impossible sequences | 01 |
-| 8 | Agreement of the final classes and segments to review | 01 |
-| 9 | Class of each position | 01 |
-| 10 | Phenological stages and breeding/wintering areas (KDE) | 03 |
-| 11 | Phenological dates and dates to review | 03 |
+| Step | What is done |
+|---|---|
+| 1. Preparation of the track (01) | Projection, removal of outliers and repeated positions |
+| 2. Segmentation (01) | Segmentation of the track with `segclust2d` |
+| 3. Movement metrics (01) | Movement metrics of each segment |
+| 4. Clustering of segments (01) | Two clusterings of the segments: movement mode and distance to the colony |
+| 5. Initial classification (01) | Initial class (B, mig or W) of each segment |
+| 6. Agreement score and selection of metrics (01) | Agreement between class and movement; selection of the best combination of metrics |
+| 7. Corrections (01) | Corrections for the equinoxes, distance, speed and impossible sequences |
+| 8. Segments to review (01) | Agreement of the final classes and segments flagged for review |
+| 9. Supervised correction (02) | Optional: review and correction of the classes, position by position |
+| 10. Phenological stages and breeding/wintering areas (03) | Stages of the annual cycle and kernel density estimation (KDE) of each breeding and wintering area |
+| 11. Phenological dates and dates to review (03) | Arrival and departure dates, and dates flagged for review |
 
-Steps 1-9 are done by `classify_track()` (script 01) and steps 10-11 by
-`phenology_track()` (script 03). Script 02 (optional) lets the user correct
-the classes position by position between steps 9 and 10.
+Steps 1-8 are done by `classify_track()` (script 01), step 9 by script 02 and
+steps 10-11 by `phenology_track()` (script 03).
 
 ---
 
 ## 1. Preparation of the track
 
-| Step | Rule | Parameter |
+| Sub-step | Rule | Parameter |
 |---|---|---|
-| 1.1 | Positions are projected to an azimuthal equidistant projection centred on the colony (km). | — |
-| 1.2 | Outliers: positions whose distance to the next position is longer than `max_step` are removed. This is repeated until no step is longer than `max_step`. | `adv$max_step` = 4440 km |
-| 1.3 | GLS only. Equinox windows: positions within `eq_window_days` of the September and March equinoxes (21 September and 21 March after the start of the track) are labelled `Sep` or `Mar`. If all positions in a window have the same latitude (latitude not estimated), only the first and last positions of the window are kept. | `eq_window_days` = 20 |
-| 1.4 | Repeated latitudes: if more than `max_repeated` positions have exactly the same latitude, the repeated ones are removed. | `adv$max_repeated` = 4 |
-| 1.5 | If there are repeated latitudes among the first or last `edge_positions` positions, these positions are removed. | `adv$edge_positions` = 5 |
+| 1.1. Projection | Positions are projected to an azimuthal equidistant projection centred on the colony (km). | — |
+| 1.2. Outliers | Positions whose distance to the next position is longer than `max_step` are removed. This is repeated until no step is longer than `max_step`. | `adv$max_step` = 4440 km |
+| 1.3. Equinox windows | GLS only. Positions within `eq_window_days` of the September and March equinoxes (21 September and 21 March after the start of the track) are labelled `Sep` or `Mar`. If all positions in a window have the same latitude (latitude not estimated), only the first and last positions of the window are kept. | `eq_window_days` = 20 |
+| 1.4. Repeated latitudes | If more than `max_repeated` positions have exactly the same latitude, the repeated ones are removed. | `adv$max_repeated` = 4 |
+| 1.5. Repeated positions at the ends | If there are repeated latitudes among the first or last `edge_positions` positions, these positions are removed. | `adv$edge_positions` = 5 |
 
 When the first and last positions of a track are fixed at the colony
-(deployment and recovery of the logger), they are never removed in steps 1.4
-and 1.5.
+(deployment and recovery of the logger), they are never removed in sub-steps
+1.4 and 1.5.
 
 ---
 
@@ -70,11 +69,13 @@ next steps; only the segments are used.
 
 ---
 
-## 3. Movement metrics of each segment
+## 3. Movement metrics
 
 For each segment the following metrics are calculated. Metrics from `trajr`
 are calculated on the trajectory of the segment rediscretised to its mean
-step length (`trajr::TrajRediscretize()`).
+step length (`trajr::TrajRediscretize()`). Step length, increments and NSCD of
+each position are calculated with `adehabitatLT`, and their mean and SD in
+each segment are given by `segclust2d`.
 
 | Metric | Package | Description | Reference |
 |---|---|---|---|
@@ -84,10 +85,10 @@ step length (`trajr::TrajRediscretize()`).
 | `Emax` | `trajr` | Maximum expected displacement. | Cheung et al. (2007) |
 | `sq_disp` | `trajr` | Expected square displacement of a correlated random walk. | Kareiva & Shigesada (1983) |
 | `dc_mean`, `dc_sd` | `trajr` | Mean and SD of the directional change. | Kitamura & Imafuku (2015) |
-| `mu.dist`, `sd.dist` | `segclust2d` | Mean and SD of the step length (km between consecutive positions). `mu.dist` is a measure of speed. | Calenge et al. (2009) |
-| `R2n_mean`, `R2n_sd` | `segclust2d` | Mean and SD of the net squared colony distance (NSCD). | Amélineau et al. (2021) |
-| `mu.x`, `mu.y`, `sd.x`, `sd.y` | `segclust2d` | Mean and SD of the projected coordinates. | — |
-| `mu.dx`, `mu.dy`, `sd.dx`, `sd.dy` | `segclust2d` | Mean and SD of the increments in x and y. | Calenge et al. (2009) |
+| `mu.dist`, `sd.dist` | `adehabitatLT`, `segclust2d` | Mean and SD of the step length (km between consecutive positions). `mu.dist` is a measure of speed. | Calenge et al. (2009) |
+| `R2n_mean`, `R2n_sd` | `adehabitatLT`, `segclust2d` | Mean and SD of the net squared colony distance (NSCD). | Amélineau et al. (2021) |
+| `mu.x`, `mu.y`, `sd.x`, `sd.y` | `adehabitatLT`, `segclust2d` | Mean and SD of the projected coordinates. | — |
+| `mu.dx`, `mu.dy`, `sd.dx`, `sd.dy` | `adehabitatLT`, `segclust2d` | Mean and SD of the increments in x and y. | Calenge et al. (2009) |
 
 If the metrics of a segment cannot be calculated (e.g. very compact segments),
 they are NA and the rules below treat NA conditions as FALSE.
@@ -96,7 +97,7 @@ they are NA and the rules below treat NA conditions as FALSE.
 
 ## 4. Clustering of segments
 
-<!-- FIGURE: summary of the double hierarchical clustering (to be added) -->
+![Double hierarchical clustering of the segments](figures/double_clustering.png)
 
 Two hierarchical clusterings (complete linkage, cut at k = 2, variables
 normalised) are done on the segments of the track:
@@ -116,7 +117,7 @@ two change points between these segments.
 
 ---
 
-## 5. Initial class of each segment
+## 5. Initial classification
 
 Short segments are segments with `lmin` or `lmin + 1` positions (the shortest
 segments allowed by the segmentation, about 2.5-3 days).
@@ -128,9 +129,13 @@ segments allowed by the segmentation, about 2.5-3 days).
 | Moving | Far | **mig** |
 | Moving | Near | **B** if it is the first segment of the track, or a short segment, or NSCD ≤ distance limit and `ang_vector` < `adv$breeding_ang_vector` (0.75) (the last segment of the track only needs NSCD ≤ distance limit); **mig** in all other cases |
 
+After the corrections (step 7), each position takes the class of its segment.
+Migration before the wintering stage is labelled **mig1** (post-breeding
+migration) and migration after it **mig2** (pre-breeding migration).
+
 ---
 
-## 6. Agreement score and selection of the metrics
+## 6. Agreement score and selection of metrics
 
 **Agreement score (0-1).** For each segment, four criteria describe the
 movement expected for its class:
@@ -149,7 +154,7 @@ with `straightness` < 0.2 and `ang_vector` < 0.9. The agreement score is a
 heuristic: it shows how typical the movement of a segment is for its class,
 not the probability that the class is correct.
 
-**Selection of the metrics.** The movement clustering (step 4) always uses
+**Selection of metrics.** The movement clustering (step 4) always uses
 four core metrics (`straightness`, `sinuosity`, `ang_vector`, `mu.dist`) plus
 1 to 3 groups of additional metrics (`sd.dist`, `Emax`, `sq_disp`, `R2n_sd`,
 `dc_mean`, `dc_sd`, `mu.x` + `mu.y`, `sd.x` + `sd.y`, `mu.dx` + `mu.dy`,
@@ -167,30 +172,30 @@ Applied in this order to the selected classification.
 
 | Rule | Condition | Change |
 |---|---|---|
-| E1 | mig, `sq_disp` < median of the track and `sd.y` > `adv$eq_sd_ratio_mig` (2) × `sd.x` (movement mostly in latitude) | → B if `R2n_mean` < mean of the track, else W |
-| E2 | B, `sd.x` or `sd.y` > `adv$eq_sd_limit` (111 km) and `sd.x` > `adv$eq_sd_ratio_breed` (4) × `sd.y` (movement mostly in longitude) | → mig |
+| E1. Latitudinal noise in migration | mig, `sq_disp` < median of the track and `sd.y` > `adv$eq_sd_ratio_mig` (2) × `sd.x` (movement mostly in latitude) | → B if `R2n_mean` < mean of the track, else W |
+| E2. Longitudinal movement in breeding | B, `sd.x` or `sd.y` > `adv$eq_sd_limit` (111 km) and `sd.x` > `adv$eq_sd_ratio_breed` (4) × `sd.y` (movement mostly in longitude) | → mig |
 
 **Distance and movement:**
 
 | Rule | Condition | Change |
 |---|---|---|
-| C1 | B, `R2n_mean` > mean of the track and `straightness` < `adv$corr_straightness` (0.2) | → W |
-| C2 | B, agreement < `adv$corr_score` (0.5), next to a migration segment, `straightness` > 0.2 and `sq_disp` > median of the track | → mig |
-| C3 | W, `R2n_mean` < mean of the track | → B |
-| C4 | W, `sq_disp` > median of the track, `sinuosity` < `adv$corr_sinuosity` (1) and `straightness` > 0.2 | → mig |
-| C5 | W at the start or end of the wintering stage, `mu.dist` > `adv$fast_w_ratio` (2.75) × `mu.dist` of the main (longest) wintering segment and > `adv$fast_w_min` (250 km). Only consecutive segments from the edges of the wintering stage are changed. | → mig |
+| C1. Breeding far from the colony | B, `R2n_mean` > mean of the track and `straightness` < `adv$corr_straightness` (0.2) | → W |
+| C2. Breeding with migratory movement | B, agreement < `adv$corr_score` (0.5), next to a migration segment, `straightness` > 0.2 and `sq_disp` > median of the track | → mig |
+| C3. Wintering near the colony | W, `R2n_mean` < mean of the track | → B |
+| C4. Wintering with migratory movement | W, `sq_disp` > median of the track, `sinuosity` < `adv$corr_sinuosity` (1) and `straightness` > 0.2 | → mig |
+| C5. Fast wintering segments | W at the start or end of the wintering stage, `mu.dist` > `adv$fast_w_ratio` (2.75) × `mu.dist` of the main (longest) wintering segment and > `adv$fast_w_min` (250 km). Only consecutive segments from the edges of the wintering stage are changed. | → mig |
 
 **Impossible sequences:**
 
 | Rule | Condition | Change |
 |---|---|---|
-| I1 | any class between two B segments | → B |
-| I2 | B between two W segments | → W |
-| I3 | B between two mig segments (not the first or last segment) | → W |
+| I1. Between breeding segments | any class between two B segments | → B |
+| I2. Breeding within wintering | B between two W segments | → W |
+| I3. Breeding within migration | B between two mig segments (not the first or last segment) | → W |
 
 ---
 
-## 8. Final agreement and segments to review
+## 8. Segments to review
 
 The agreement score is calculated again for the final classes (the same way
 for all segments, including corrected, first and last segments). A segment is
@@ -206,23 +211,24 @@ flagged **Check** if at least one of these reasons applies (column
 
 ---
 
-## 9. Class of each position
+## 9. Supervised correction
 
-Each position gets the class of its segment. Migration before the last
-wintering segment is **mig1** (post-breeding migration) and migration after
-it is **mig2** (pre-breeding migration).
+Optional. Script 02 shows each track on an interactive map with the class of
+each position and the segments flagged for review. The user can change the
+class of whole segments or of single positions. The corrected classification
+is saved and used in step 10 instead of the automated one.
 
 ---
 
-## 10. Phenological stages and breeding/wintering areas (script 03)
+## 10. Phenological stages and breeding/wintering areas
 
-| Step | Rule | Parameter |
+| Sub-step | Rule | Parameter |
 |---|---|---|
-| 10.1 | Short sequences (< `min_stage_days`) between two equal classes take that class (e.g. B-B-mig-B-B → B). | `min_stage_days` = 2.5 days |
-| 10.2 | Migration between two wintering stages, without breeding between them, is part of the wintering stage (W-mig-W → W). | — |
-| 10.3 | Stages are numbered in order: B1, mig1, W1, mig2, B2. If the track does not start with breeding, the first breeding stage is B2. | — |
-| 10.4 | For each breeding and wintering stage, a kernel density estimation (KDE) is calculated with the positions of that stage only (`track2KBA`). GLS: equinox positions are not used if more than `kde_min_positions` positions remain. Projection: Lambert azimuthal equal-area centred on the positions of the stage. Bandwidth: href. | `kde_level` = 90 %, `adv$kde_min_positions` = 5 |
-| 10.5 | If the KDE polygon cannot be obtained with `track2KBA::estSpaceUse()`, it is calculated with `adehabitatHR::kernelUD()`, increasing the grid extent (4, 8, 16, 32) until it works. | `adv$kde_fallback_grid` = 1000, `adv$kde_fallback_extent` = 4 |
+| 10.1. Short stages | Short sequences (< `min_stage_days`) between two equal classes take that class (e.g. B-B-mig-B-B → B). | `min_stage_days` = 2.5 days |
+| 10.2. Consecutive wintering stages | Migration between two wintering stages, without breeding between them, is part of the wintering stage (W-mig-W → W). | — |
+| 10.3. Numbering of stages | Stages are numbered in order: B1, mig1, W1, mig2, B2. If the track does not start with breeding, the first breeding stage is B2. | — |
+| 10.4. KDE | For each breeding and wintering stage, a kernel density estimation (KDE) is calculated with the positions of that stage only (`track2KBA`). GLS: equinox positions are not used if more than `kde_min_positions` positions remain. Projection: Lambert azimuthal equal-area centred on the positions of the stage. Bandwidth: href. | `kde_level` = 90 %, `adv$kde_min_positions` = 5 |
+| 10.5. Alternative KDE | If the KDE polygon cannot be obtained with `track2KBA::estSpaceUse()`, it is calculated with `adehabitatHR::kernelUD()`, increasing the grid extent (4, 8, 16, 32) until it works. | `adv$kde_fallback_grid` = 1000, `adv$kde_fallback_extent` = 4 |
 
 ---
 
