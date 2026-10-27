@@ -34,7 +34,7 @@ source('parameters.R')
 
 ## 3. Load tracking data and metadata
 
-Besides metadata and tracks, we can optionally load a map of areas (e.g. marine ecoregions) to give a name to each wintering area (section 4.4). This is not needed to obtain the dates. The example file `input/wintering_areas` contains ecoregions of the Atlantic Ocean; other users can use any polygons for their species and study area.
+Besides metadata and tracks, we can optionally load a map of areas (e.g. marine ecoregions) to give a name to each wintering area (section 4.4). This is not needed to obtain the dates. The example file `input/wintering_areas` contains the Marine Ecoregions of the World (MEOW; Spalding et al. 2007) of the Atlantic Ocean, as adapted by Virginia et al. (2025); other users can use any polygons for their species and study area.
 
 ```{r}
 #Metadata

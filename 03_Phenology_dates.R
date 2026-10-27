@@ -61,7 +61,8 @@ tracks_file <- file.path(out_dir, ifelse(use_corrected,
 # ecoregions). Folder or file of the polygons (NULL: not used) and column with
 # the name of each area. The name is the area with most positions of the
 # wintering stage (NA if no position falls inside any area).
-areas_file <- NULL            # e.g. 'input/wintering_areas'
+areas_file <- NULL            # e.g. 'input/wintering_areas' (Marine Ecoregions of
+                              #   the World, adapted by Virginia et al. 2025)
 area_col   <- 'ECOREGION'
 
 # Save a map with the KDEs and dates of each track?
