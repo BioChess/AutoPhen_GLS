@@ -142,9 +142,9 @@ movement expected for its class:
 
 | Criterion | Breeding / wintering | Migration |
 |---|---|---|
-| `straightness` | < 0.5 | > 0.5 |
-| `ang_vector` | < 0.5 | > 0.5 |
-| `sinuosity` | > 1 | < 1 |
+| `straightness` | ≤ 0.5 | > 0.5 |
+| `ang_vector` | ≤ 0.5 | > 0.5 |
+| `sinuosity` | ≥ 1 | < 1 |
 | `mu.dist` | ≤ 1.5 × median of the track | > 1.5 × median of the track |
 
 The agreement is the proportion of criteria that agree with the class (0,

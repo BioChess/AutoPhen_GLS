@@ -113,7 +113,7 @@ adv <- list(
 
   # --- 2.6. Agreement score [P22, P24] ----------------------------------------
   # Agreement between the class of a segment and its movement metrics:
-  # Breeding/wintering: straightness < 0.5, ang_vector < 0.5, sinuosity > 1,
+  # Breeding/wintering: straightness <= 0.5, ang_vector <= 0.5, sinuosity >= 1,
   #   mean step length (mu.dist) <= 1.5 x median step length of the track
   # Migration: the opposite. Agreement = proportion of criteria met (0, 0.25,
   # 0.5, 0.75 or 1); 0 for impossible classes (see agreement_score()).

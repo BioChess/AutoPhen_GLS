@@ -125,7 +125,7 @@ remove_duplicates <- function(data, equinox_days = 20,
 ################################################################################
 # agreement_score(): agreement between the class of each segment and its
 # movement metrics (0-1). Breeding and wintering segments are expected to be
-# tortuous and slow (straightness < 0.5, ang_vector < 0.5, sinuosity > 1,
+# tortuous and slow (straightness <= 0.5, ang_vector <= 0.5, sinuosity >= 1,
 # mean step length not much larger than the median of the track) and
 # migration segments the opposite. The score is the proportion of these four
 # criteria that agree with the class. It is 0 for impossible classes:
@@ -136,9 +136,10 @@ remove_duplicates <- function(data, equinox_days = 20,
 
 agreement_score <- function(df_seg, R2n, adv) {
   speed_ref <- median(df_seg$mu.dist, na.rm = TRUE)
-  stationary <- (df_seg$straightness < adv$score_straightness) +
-    (df_seg$ang_vector < adv$score_ang_vector) +
-    (df_seg$sinuosity > adv$score_sinuosity) +
+  # Values equal to a threshold count as stationary
+  stationary <- (df_seg$straightness <= adv$score_straightness) +
+    (df_seg$ang_vector <= adv$score_ang_vector) +
+    (df_seg$sinuosity >= adv$score_sinuosity) +
     (df_seg$mu.dist <= adv$score_speed * speed_ref)
   moving <- (df_seg$straightness > adv$score_straightness) +
     (df_seg$ang_vector > adv$score_ang_vector) +
