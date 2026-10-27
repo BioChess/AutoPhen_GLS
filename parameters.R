@@ -46,7 +46,7 @@ eq_window_days <- 20
 # --- 1.4. Segmentation [P09, P10, P11] -----------------------------------------
 # Kmax: maximum number of segments per track.
 #   Increase it for long tracks or tracks with many movement phases.
-Kmax <- 25
+Kmax <- 15
 
 # ncluster: range of numbers of clusters tested by segclust2d. The best value
 #   is selected by BIC.

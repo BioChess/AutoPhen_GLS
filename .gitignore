@@ -28,4 +28,4 @@ gls_preprocessing/output/trn_bak/
 data/
 
 # Results of the full dataset (not shared)
-output/full/
+output/full*/
