@@ -15,24 +15,23 @@ x² + y² (km²).
 
 ## Overview
 
-```mermaid
-flowchart TD
-    A[Positions of one track] --> B[1. Preparation<br/>projection, outliers, repeated positions]
-    B --> C[2. Segmentation<br/>segclust2d on x, y]
-    C --> D[3. Metrics of each segment]
-    D --> E[4. Two clusterings of segments<br/>movement mode and distance to colony]
-    E --> F[5. Initial class of each segment<br/>rules R1-R5]
-    F --> G[6. Agreement score<br/>selection of the best combination of metrics]
-    G --> H[7. Corrections<br/>equinox, distance, speed, impossible sequences]
-    H --> I[8. Agreement of final classes<br/>segments to review]
-    I --> J[9. Class of each position<br/>B, mig1, W, mig2]
-    J --> K[10. Stages and KDE<br/>breeding and wintering areas]
-    K --> L[11. Dates and dates to review]
-```
+| Step | What is done | Script |
+|---|---|---|
+| 1 | Preparation of the track: projection, outliers, repeated positions | 01 |
+| 2 | Segmentation of the track (`segclust2d`) | 01 |
+| 3 | Movement metrics of each segment | 01 |
+| 4 | Two clusterings of the segments: movement mode and distance to the colony | 01 |
+| 5 | Initial class of each segment | 01 |
+| 6 | Agreement score and selection of the best combination of metrics | 01 |
+| 7 | Corrections: equinox, distance, speed and impossible sequences | 01 |
+| 8 | Agreement of the final classes and segments to review | 01 |
+| 9 | Class of each position | 01 |
+| 10 | Phenological stages and breeding/wintering areas (KDE) | 03 |
+| 11 | Phenological dates and dates to review | 03 |
 
-Steps 1-9 are done by `classify_track()` (script 01). Steps 10-11 are done by
+Steps 1-9 are done by `classify_track()` (script 01) and steps 10-11 by
 `phenology_track()` (script 03). Script 02 (optional) lets the user correct
-classes position by position between steps 9 and 10.
+the classes position by position between steps 9 and 10.
 
 ---
 
@@ -46,8 +45,8 @@ classes position by position between steps 9 and 10.
 | 1.4 | Repeated latitudes: if more than `max_repeated` positions have exactly the same latitude, the repeated ones are removed. | `adv$max_repeated` = 4 |
 | 1.5 | If there are repeated latitudes among the first or last `edge_positions` positions, these positions are removed. | `adv$edge_positions` = 5 |
 
-Positions fixed at the colony (the first and last positions of complete
-tracks, see `analyses/prepare_full_dataset.R`) are never removed in steps 1.4
+When the first and last positions of a track are fixed at the colony
+(deployment and recovery of the logger), they are never removed in steps 1.4
 and 1.5.
 
 ---
@@ -60,26 +59,35 @@ coordinates (x, y), with:
 - maximum number of segments `Kmax` = 15;
 - minimum segment length `lmin` = `max(5, min_segment_days × positions_per_day)`
   = 5 positions (2.5 days with two positions per day; 5 is the minimum
-  accepted by segclust2d);
+  accepted by `segclust2d`);
 - number of clusters `ncluster` = 5 to 10.
 
-The number of segments and clusters is selected by BIC. The clusters of
-segclust2d are not used later: only the segments are used.
+The number of segments and clusters is selected by BIC. Segmentation and
+clustering are done together: clustering allows segments that are separated
+in time but have a similar movement (e.g. the outward and return migrations)
+to belong to the same cluster. The clusters themselves are not used in the
+next steps; only the segments are used.
 
 ---
 
-## 3. Metrics of each segment
+## 3. Movement metrics of each segment
 
-For each segment the following metrics are calculated:
+For each segment the following metrics are calculated. Metrics from `trajr`
+are calculated on the trajectory of the segment rediscretised to its mean
+step length (`trajr::TrajRediscretize()`).
 
-| Metric | Description |
-|---|---|
-| `straightness` | Net displacement / path length (0-1; 1 = straight line). `trajr::TrajStraightness()` on the trajectory rediscretised to its mean step length. |
-| `ang_vector` | Mean resultant length of the turning angles (0-1). High values: the bird keeps the same direction; low values: the bird turns in all directions ("a ball of positions"). |
-| `sinuosity` | Sinuosity index (Benhamou 2004), made dimensionless by multiplying by the square root of the mean step length. Sinuosity > 1 when the mean cosine of the turning angles is < 0.6. |
-| `mu.dist` | Mean step length (km between consecutive positions): a measure of speed. |
-| `R2n_mean`, `R2n_sd` | Mean and SD of NSCD. |
-| Others | `sd.dist`, `Emax`, `sq_disp` (expected square displacement), `dc_mean`, `dc_sd` (directional change), and mean and SD of x, y, dx, dy. |
+| Metric | Package | Description | Reference |
+|---|---|---|---|
+| `straightness` | `trajr` | Straightness index D/L: net displacement divided by path length (0-1; 1 = straight line). | Batschelet (1981) |
+| `ang_vector` | `trajr` | Length of the mean vector of the turning angles (0-1). High values: the bird keeps the same direction. Low values: frequent changes of direction, as when positions are concentrated in a small area. | Batschelet (1981) |
+| `sinuosity` | `trajr` | Sinuosity index, multiplied by the square root of the mean step length so that it has no units. Sinuosity > 1 when the mean cosine of the turning angles is < 0.6. | Benhamou (2004) |
+| `Emax` | `trajr` | Maximum expected displacement. | Cheung et al. (2007) |
+| `sq_disp` | `trajr` | Expected square displacement of a correlated random walk. | Kareiva & Shigesada (1983) |
+| `dc_mean`, `dc_sd` | `trajr` | Mean and SD of the directional change. | Kitamura & Imafuku (2015) |
+| `mu.dist`, `sd.dist` | `segclust2d` | Mean and SD of the step length (km between consecutive positions). `mu.dist` is a measure of speed. | Calenge et al. (2009) |
+| `R2n_mean`, `R2n_sd` | `segclust2d` | Mean and SD of the net squared colony distance (NSCD). | Amélineau et al. (2021) |
+| `mu.x`, `mu.y`, `sd.x`, `sd.y` | `segclust2d` | Mean and SD of the projected coordinates. | — |
+| `mu.dx`, `mu.dy`, `sd.dx`, `sd.dy` | `segclust2d` | Mean and SD of the increments in x and y. | Calenge et al. (2009) |
 
 If the metrics of a segment cannot be calculated (e.g. very compact segments),
 they are NA and the rules below treat NA conditions as FALSE.
@@ -88,32 +96,37 @@ they are NA and the rules below treat NA conditions as FALSE.
 
 ## 4. Clustering of segments
 
+<!-- FIGURE: summary of the double hierarchical clustering (to be added) -->
+
 Two hierarchical clusterings (complete linkage, cut at k = 2, variables
 normalised) are done on the segments of the track:
 
-1. **Movement mode (S_M):** on the movement metrics (see step 6 for which
-   metrics). The cluster that contains the segment with the lowest
-   `ang_vector` is **Stationary**; the other is **Moving**.
-2. **Distance to the colony (B_nB):** on `R2n_mean`. The cluster that
-   contains the segment with the lowest `R2n_mean` is **Near (B)**; the other
-   is **Far (Non-B)**.
+1. **Movement mode:** on the movement metrics (see step 6 for which metrics).
+   The cluster that contains the segment with the lowest `ang_vector` is
+   **Stationary**; the other is **Moving**.
+2. **Distance to the colony:** on `R2n_mean`. The cluster that contains the
+   segment with the lowest `R2n_mean` is **Near** (breeding); the other is
+   **Far** (non-breeding: wintering and migration).
 
-A **distance limit** (NSCD limit) is also calculated: NSCD is segmented into
-3 segments (`segclust2d`, `adv$nscd_Kmax` = 3, `adv$nscd_ncluster` = 3) and the
-limit is the mean NSCD at the two change points.
+**Distance limit.** To decide which segments can be breeding, a distance
+limit is calculated for each track, so it does not need to be fixed in
+advance for each species or colony. NSCD is segmented into three segments
+(Lavielle segmentation with `segclust2d`) and the limit is the mean NSCD at the
+two change points between these segments.
 
 ---
 
 ## 5. Initial class of each segment
 
-| Rule | Movement mode | Distance | Condition | Class |
-|---|---|---|---|---|
-| R1 | Stationary | Near | — | **B** |
-| R2 | Stationary | Far | short segment (≤ `lmin` positions) and `straightness` > `adv$short_straightness` (0.5) | **mig** |
-| R3 | Stationary | Far | otherwise | **W** |
-| R4 | Moving | Far | — | **mig** |
-| R5 | Moving | Near | short segment (≤ `lmin`), or first segment of the track, or last segment with NSCD ≤ limit, or NSCD ≤ limit and `ang_vector` < `adv$breeding_ang_vector` (0.75) | **B** |
-| R5b | Moving | Near | otherwise | **mig** |
+Short segments are segments with `lmin` or `lmin + 1` positions (the shortest
+segments allowed by the segmentation, about 2.5-3 days).
+
+| Movement mode | Distance | Class |
+|---|---|---|
+| Stationary | Near | **B** |
+| Stationary | Far | **mig** if it is a short segment and `straightness` > `adv$short_straightness` (0.5); **W** in all other cases |
+| Moving | Far | **mig** |
+| Moving | Near | **B** if it is the first segment of the track, or a short segment, or NSCD ≤ distance limit and `ang_vector` < `adv$breeding_ang_vector` (0.75) (the last segment of the track only needs NSCD ≤ distance limit); **mig** in all other cases |
 
 ---
 
@@ -124,29 +137,25 @@ movement expected for its class:
 
 | Criterion | Breeding / wintering | Migration |
 |---|---|---|
-| straightness | < 0.5 | > 0.5 |
-| ang_vector | < 0.5 | > 0.5 |
-| sinuosity | > 1 | < 1 |
-| mean step length | ≤ 1.5 × median of the track | > 1.5 × median of the track |
+| `straightness` | < 0.5 | > 0.5 |
+| `ang_vector` | < 0.5 | > 0.5 |
+| `sinuosity` | > 1 | < 1 |
+| `mu.dist` | ≤ 1.5 × median of the track | > 1.5 × median of the track |
 
 The agreement is the proportion of criteria that agree with the class (0,
 0.25, 0.5, 0.75 or 1). It is 0 for impossible classes: breeding with NSCD above
-the limit, wintering with NSCD below the limit, or migration with
-`straightness` < 0.2 and `ang_vector` < 0.9.
-
-The agreement score is a heuristic: it shows how typical the movement of a
-segment is for its class, not the probability that the class is correct.
-Against a manual (supervised) classification of 122 *Calonectris* tracks,
-lower agreement is related to more misclassified segments (see the paper).
+the distance limit, wintering with NSCD below the distance limit, or migration
+with `straightness` < 0.2 and `ang_vector` < 0.9. The agreement score is a
+heuristic: it shows how typical the movement of a segment is for its class,
+not the probability that the class is correct.
 
 **Selection of the metrics.** The movement clustering (step 4) always uses
 four core metrics (`straightness`, `sinuosity`, `ang_vector`, `mu.dist`) plus
-1 to 3 groups of extra metrics (`sd.dist`, `Emax`, `sq_disp`, `R2n_sd`,
-`dc_mean`, `dc_sd`, mean x-y, SD x-y, mean dx-dy, SD dx-dy): 175 combinations.
-Steps 4-6 are repeated for each combination, and the classification with the
-highest mean agreement is kept (if tied, the one with fewer metrics). We also
-tested a consensus classification (the most frequent class of each segment
-across all combinations); it agreed less with the manual classification.
+1 to 3 groups of additional metrics (`sd.dist`, `Emax`, `sq_disp`, `R2n_sd`,
+`dc_mean`, `dc_sd`, `mu.x` + `mu.y`, `sd.x` + `sd.y`, `mu.dx` + `mu.dy`,
+`sd.dx` + `sd.dy`): 175 combinations. Steps 4-6 are repeated for each
+combination, and the classification with the highest mean agreement is kept
+(if tied, the one with fewer metrics).
 
 ---
 
@@ -158,8 +167,8 @@ Applied in this order to the selected classification.
 
 | Rule | Condition | Change |
 |---|---|---|
-| E1 | mig, `sq_disp` < median of the track and SD(y) > `adv$eq_sd_ratio_mig` (2) × SD(x) (movement mostly in latitude) | → B if `R2n_mean` < mean of the track, else W |
-| E2 | B, SD(x) or SD(y) > `adv$eq_sd_limit` (111 km) and SD(x) > `adv$eq_sd_ratio_breed` (4) × SD(y) (movement mostly in longitude) | → mig |
+| E1 | mig, `sq_disp` < median of the track and `sd.y` > `adv$eq_sd_ratio_mig` (2) × `sd.x` (movement mostly in latitude) | → B if `R2n_mean` < mean of the track, else W |
+| E2 | B, `sd.x` or `sd.y` > `adv$eq_sd_limit` (111 km) and `sd.x` > `adv$eq_sd_ratio_breed` (4) × `sd.y` (movement mostly in longitude) | → mig |
 
 **Distance and movement:**
 
@@ -194,7 +203,7 @@ flagged **Check** if at least one of these reasons applies (column
 | corrected | the class was changed in step 7 |
 | equinox | GLS only: the segment overlaps an equinox window and there is a change of stage before or after it |
 | direct B-W | change between breeding and wintering without migration between them |
-| far W | wintering segment more than `adv$w_far_km` (1000 km) from the main wintering segment (possible stopover or migration loop) |
+| far W | wintering segment more than `adv$w_far_km` (1000 km) from the main wintering segment |
 
 ---
 
@@ -206,19 +215,19 @@ it is **mig2** (pre-breeding migration).
 
 ---
 
-## 10. Stages and breeding/wintering areas (script 03)
+## 10. Phenological stages and breeding/wintering areas (script 03)
 
 | Step | Rule | Parameter |
 |---|---|---|
 | 10.1 | Short sequences (< `min_stage_days`) between two equal classes take that class (e.g. B-B-mig-B-B → B). | `min_stage_days` = 2.5 days |
 | 10.2 | Migration between two wintering stages, without breeding between them, is part of the wintering stage (W-mig-W → W). | — |
 | 10.3 | Stages are numbered in order: B1, mig1, W1, mig2, B2. If the track does not start with breeding, the first breeding stage is B2. | — |
-| 10.4 | For each breeding and wintering stage, a kernel density estimation (KDE) is calculated with the positions of that stage only. GLS: equinox positions are not used if more than `kde_min_positions` positions remain. Projection: Lambert azimuthal equal-area centred on the positions of the stage. Bandwidth: href. | `kde_level` = 90 %, `adv$kde_min_positions` = 5 |
+| 10.4 | For each breeding and wintering stage, a kernel density estimation (KDE) is calculated with the positions of that stage only (`track2KBA`). GLS: equinox positions are not used if more than `kde_min_positions` positions remain. Projection: Lambert azimuthal equal-area centred on the positions of the stage. Bandwidth: href. | `kde_level` = 90 %, `adv$kde_min_positions` = 5 |
 | 10.5 | If the KDE polygon cannot be obtained with `track2KBA::estSpaceUse()`, it is calculated with `adehabitatHR::kernelUD()`, increasing the grid extent (4, 8, 16, 32) until it works. | `adv$kde_fallback_grid` = 1000, `adv$kde_fallback_extent` = 4 |
 
 ---
 
-## 11. Dates and dates to review
+## 11. Phenological dates and dates to review
 
 Dates are searched only among the positions of the stage and of the
 migrations next to it (positions of another breeding or wintering stage are
@@ -240,14 +249,39 @@ The dates of a track are flagged **Check** if:
 
 ---
 
+## Choice of thresholds
+
+The thresholds of the movement metrics are round values chosen after
+preliminary tests with our data. Two of them have a simple interpretation:
+
+- `straightness` and `ang_vector` range from 0 to 1, and 0.5 is the middle
+  point between a tortuous and a directed movement.
+- A dimensionless `sinuosity` of 1 corresponds to a mean cosine of the turning
+  angles of 0.6.
+
+These thresholds are not universal. They are given as advanced parameters in
+`parameters.R`, so they can be adapted to other species or tracking systems,
+and their effect on the results is evaluated in the sensitivity analysis.
+
+---
+
 ## Known limitations
 
-- The movement clustering has two groups. In some tracks the two groups
-  separate other things (e.g. the breeding period from the wintering period)
-  rather than stationary from moving segments.
 - Segments are classified as a whole. When a segment contains the end of one
   stage and the start of the next one, the change of stage is shifted by a
   few positions. Script 02 allows correction position by position.
 - When the wintering area is inside or very close to the breeding area
   (residents or short-distance migrants), GLS positions cannot separate them.
   These tracks are flagged by `KDE_overlap` and need manual review.
+
+---
+
+## References
+
+- Amélineau F, et al. (2021). [complete reference]
+- Batschelet E (1981). *Circular statistics in biology.* Academic Press.
+- Benhamou S (2004). How to reliably estimate the tortuosity of an animal's path: straightness, sinuosity, or fractal dimension? *Journal of Theoretical Biology* 229: 209-220.
+- Calenge C, Dray S, Royer-Carenzi M (2009). The concept of animals' trajectories from a data analysis perspective. *Ecological Informatics* 4: 34-41.
+- Cheung A, Zhang S, Stricker C, Srinivasan MV (2007). Animal navigation: the difficulty of moving in a straight line. *Biological Cybernetics* 97: 47-61.
+- Kareiva PM, Shigesada N (1983). Analyzing insect movement as a correlated random walk. *Oecologia* 56: 234-238.
+- Kitamura T, Imafuku M (2015). Behavioural mimicry in flight path of Batesian intraspecific polymorphic butterfly *Papilio polytes*. *Proceedings of the Royal Society B* 282: 20150483.
