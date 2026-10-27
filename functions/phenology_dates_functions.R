@@ -399,7 +399,8 @@ extract_phen_dates <- function(results_list) {
 
 phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
                             use_equinox = TRUE, world = NULL,
-                            make_plot = FALSE) {
+                            make_plot = FALSE, areas = NULL,
+                            area_col = NULL) {
 
   track.ph <- track.ph %>% arrange(date)
   if (!'Equinox' %in% names(track.ph)) track.ph$Equinox <- 'No'
@@ -509,5 +510,37 @@ phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
     map <- phen_map(track = track_f, col.lat = info$Colony.lat,
                     col.lon = info$Colony.lon, results_list, world)
   }
+  # --- Optional: name of each wintering area ----------------------------------
+  if (!is.null(areas)) {
+    wa <- name_wintering_areas(track.ph2, areas, area_col)
+    for (k in seq_len(nrow(wa))) dates[[paste0(wa$Breed3[k], '_area')]] <- wa$Area[k]
+  }
+
   list(dates = dates, map = map)
+}
+
+
+################################################################################
+# name_wintering_areas(): OPTIONAL. Gives a name to each wintering stage from a
+# map of areas (e.g. marine ecoregions): the area that contains most positions
+# of the stage. If no position falls inside any area, the name is NA (no
+# default area is assigned).
+#
+# @track    : positions with columns x (longitude), y (latitude) and Breed3
+# @areas    : sf polygons with the areas (any CRS)
+# @area_col : column of 'areas' with the name of each area
+
+name_wintering_areas <- function(track, areas, area_col) {
+  w <- track[grepl('^W[0-9]+$', track$Breed3), ]
+  stages <- unique(w$Breed3)
+  if (length(stages) == 0) return(data.frame(Breed3 = character(), Area = character()))
+  pts <- sf::st_as_sf(w, coords = c('x', 'y'), crs = 4326, remove = FALSE)
+  areas <- sf::st_transform(areas[, area_col], 4326)
+  joined <- sf::st_drop_geometry(sf::st_join(pts, areas, left = FALSE))
+  out <- data.frame(Breed3 = stages, Area = NA_character_)
+  for (k in seq_along(stages)) {
+    a <- joined[[area_col]][joined$Breed3 == stages[k]]
+    if (length(a) > 0) out$Area[k] <- names(which.max(table(a)))
+  }
+  out
 }

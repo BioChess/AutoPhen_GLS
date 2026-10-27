@@ -34,7 +34,7 @@ source('parameters.R')
 
 ## 3. Load tracking data and metadata
 
-Besides metadata and tracks, we load the **wintering areas** shapefile. This file contains the different ecoregions of the Atlantic ocean where seabirds like shearwaters can winter. These ecoregions were defined by ... and the shapefile is adapted by Virginia et al. (2025), where she included two ecoregions more (Equatorial Atlantic and South Atlantic). These ecoregions can be adapted for other species and in the context of other oceans and seas.
+Besides metadata and tracks, we can optionally load a map of areas (e.g. marine ecoregions) to give a name to each wintering area (section 4.4). This is not needed to obtain the dates. The example file `input/wintering_areas` contains ecoregions of the Atlantic Ocean; other users can use any polygons for their species and study area.
 
 ```{r}
 #Metadata
@@ -55,9 +55,10 @@ tracks.ph <- read_csv(tracks_file)
 if (!'Equinox' %in% names(tracks.ph)) tracks.ph$Equinox <- 'No'
 ids <-unique(tracks.ph$ID)
 
-# Wintering areas and ecoregions
-w.areas <- read_sf(dsn = "input/wintering_areas")
-ecoregions <- w.areas %>% dplyr::select(ECOREGION)
+# OPTIONAL: map of areas to name the wintering areas (NULL: not used)
+areas_file <- 'input/wintering_areas'
+area_col   <- 'ECOREGION'
+areas <- if (is.null(areas_file)) NULL else read_sf(areas_file)
 
 world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
 sf_use_s2(FALSE)
@@ -203,36 +204,14 @@ breed_plot <- ggplot()+
 breed_plot
 ```
 
-### 4.4. Assign wintering areas
+### 4.4. Name the wintering areas (optional)
 
-We project the track with the same projection that has the wintering areas shapefile. Per each wintering stage, we assign the ecoregion where more wintering points are located.
+If a map of areas was loaded (section 3), each wintering stage gets the name of the area that contains most of its positions. If no position falls inside any area, the name is NA.
 
 ```{r}
-
-# Track projected
-track_sf <- track_f%>%
-  st_as_sf(coords = c("Longitude", "Latitude"),
-           crs = 4326, agr = "constant", remove = FALSE)
-
-df_win <- st_join(track_sf, ecoregions, left = FALSE)
-
-WAs <- df_win %>%
-  filter(str_detect(Breed3, "^W\\d+$")) %>%  # Select wintering points
-  group_by(Breed3) %>% 
-  dplyr::summarise(
-    Ecoregion = names(which.max(table(ECOREGION)))  # Which is the most frequent ecoregion
-  ) %>%
-  right_join(
-    tibble(Breed3 = unique(df_win$Breed3[str_detect(df_win$Breed3, "^W\\d+$")])), 
-    by = "Breed3"
-  )
-
-if(nrow(WAs) == 0){
-  WAs <- ecoregions %>%
-    filter(ECOREGION == 'Saharan_Upwelling')%>%
-    add_column(Breed3 = 'W1')%>%
-    dplyr::select(Breed3, Ecoregion = ECOREGION)
-  
+if (!is.null(areas)) {
+  WAs <- name_wintering_areas(track.ph2, areas, area_col)
+  WAs
 }
 ```
 

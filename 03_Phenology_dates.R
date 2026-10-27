@@ -57,6 +57,13 @@ tracks_file <- file.path(out_dir, ifelse(use_corrected,
                                          'Phenology_tracks_corrected.csv',
                                          'Phenology_tracks.csv'))
 
+# OPTIONAL: name each wintering area with a map of areas (e.g. marine
+# ecoregions). Folder or file of the polygons (NULL: not used) and column with
+# the name of each area. The name is the area with most positions of the
+# wintering stage (NA if no position falls inside any area).
+areas_file <- NULL            # e.g. 'input/wintering_areas'
+area_col   <- 'ECOREGION'
+
 # Save a map with the KDEs and dates of each track?
 save_plots <- TRUE
 plots_dir  <- file.path(out_dir, 'plots', 'phenology')
@@ -73,6 +80,7 @@ tracks.ph <- read_csv(tracks_file, show_col_types = FALSE) %>%
 ids <- unique(tracks.ph$ID)
 
 world <- rnaturalearth::ne_countries(scale = "medium", returnclass = "sf")
+areas <- if (is.null(areas_file)) NULL else sf::read_sf(areas_file)
 sf_use_s2(FALSE)
 if (save_plots) dir.create(plots_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -102,7 +110,8 @@ for (i in seq_along(ids)) {
                       min_stage_length = min_stage_length,
                       kde_level = kde_level, adv = adv,
                       use_equinox = use_equinox,
-                      world = world, make_plot = save_plots)),
+                      world = world, make_plot = save_plots,
+                      areas = areas, area_col = area_col)),
     error = function(e) {
       message('  ERROR in track ', ids[i], ': ', conditionMessage(e))
       failed <<- rbind(failed, data.frame(ID = ids[i],
