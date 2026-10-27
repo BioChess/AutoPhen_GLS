@@ -283,7 +283,7 @@ and their effect on the results is evaluated in the sensitivity analysis.
 
 ## References
 
-- Amélineau F, et al. (2021). [complete reference]
+- Amélineau F, Merkel B, Tarroux A, Descamps S, Anker-Nilssen T, Bjørnstad O, et al. (2021). Six pelagic seabird species of the North Atlantic engage in a fly-and-forage strategy during their migratory movements. *Marine Ecology Progress Series* 676: 127-144.
 - Batschelet E (1981). *Circular statistics in biology.* Academic Press.
 - Benhamou S (2004). How to reliably estimate the tortuosity of an animal's path: straightness, sinuosity, or fractal dimension? *Journal of Theoretical Biology* 229: 209-220.
 - Calenge C, Dray S, Royer-Carenzi M (2009). The concept of animals' trajectories from a data analysis perspective. *Ecological Informatics* 4: 34-41.
