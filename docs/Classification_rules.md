@@ -77,18 +77,18 @@ step length (`trajr::TrajRediscretize()`). Step length, increments and NSCD of
 each position are calculated with `adehabitatLT`, and their mean and SD in
 each segment are given by `segclust2d`.
 
-| Metric | Package | Description | Reference |
-|---|---|---|---|
-| `straightness` | `trajr` | Straightness index D/L: net displacement divided by path length (0-1; 1 = straight line). | Batschelet (1981) |
-| `ang_vector` | `trajr` | Length of the mean vector of the turning angles (0-1). High values: the bird keeps the same direction. Low values: frequent changes of direction, as when positions are concentrated in a small area. | Batschelet (1981) |
-| `sinuosity` | `trajr` | Sinuosity index, multiplied by the square root of the mean step length so that it has no units. Sinuosity > 1 when the mean cosine of the turning angles is < 0.6. | Benhamou (2004) |
-| `Emax` | `trajr` | Maximum expected displacement. | Cheung et al. (2007) |
-| `sq_disp` | `trajr` | Expected square displacement of a correlated random walk. | Kareiva & Shigesada (1983) |
-| `dc_mean`, `dc_sd` | `trajr` | Mean and SD of the directional change. | Kitamura & Imafuku (2015) |
-| `mu.dist`, `sd.dist` | `adehabitatLT`, `segclust2d` | Mean and SD of the step length (km between consecutive positions). `mu.dist` is a measure of speed. | Calenge et al. (2009) |
-| `R2n_mean`, `R2n_sd` | `adehabitatLT`, `segclust2d` | Mean and SD of the net squared colony distance (NSCD). | Amélineau et al. (2021) |
-| `mu.x`, `mu.y`, `sd.x`, `sd.y` | `adehabitatLT`, `segclust2d` | Mean and SD of the projected coordinates. | — |
-| `mu.dx`, `mu.dy`, `sd.dx`, `sd.dy` | `adehabitatLT`, `segclust2d` | Mean and SD of the increments in x and y. | Calenge et al. (2009) |
+| Metric | Name in the code | Package | Description | Reference |
+|---|---|---|---|---|
+| Straightness | `straightness` | `trajr` | Straightness index D/L: net displacement divided by path length (0-1; 1 = straight line). | Batschelet (1981) |
+| Mean vector of turning angles | `ang_vector` | `trajr` | Length of the mean vector of the turning angles (0-1). High values: the bird keeps the same direction. Low values: frequent changes of direction, as when positions are concentrated in a small area. | Batschelet (1981) |
+| Sinuosity | `sinuosity` | `trajr` | Sinuosity index, multiplied by the square root of the mean step length so that it has no units. Sinuosity > 1 when the mean cosine of the turning angles is < 0.6. | Benhamou (2004) |
+| Maximum expected displacement | `Emax` | `trajr` | Maximum expected displacement, as a function of the number of steps. | Cheung et al. (2007) |
+| Expected square displacement | `sq_disp` | `trajr` | Expected square displacement of a correlated random walk. | Kareiva & Shigesada (1983) |
+| Directional change | `dc_mean`, `dc_sd` | `trajr` | Mean and SD of the change in direction over time. | Kitamura & Imafuku (2015) |
+| Step length | `mu.dist`, `sd.dist` | `adehabitatLT`, `segclust2d` | Mean and SD of the step length (km between consecutive positions). `mu.dist` is a measure of speed. | Calenge et al. (2009) |
+| Net squared colony distance (NSCD) | `R2n_mean`, `R2n_sd` | `adehabitatLT` | Mean and SD of the squared distance between each position and the colony. | Turchin (1998), adapted by Amélineau et al. (2021) |
+| Coordinates | `mu.x`, `mu.y`, `sd.x`, `sd.y` | `adehabitatLT`, `segclust2d` | Mean and SD of the projected coordinates. | — |
+| Increments in x and y | `mu.dx`, `mu.dy`, `sd.dx`, `sd.dy` | `adehabitatLT`, `segclust2d` | Mean and SD of the increments of the movement in x and y. | Calenge et al. (2009) |
 
 If the metrics of a segment cannot be calculated (e.g. very compact segments),
 they are NA and the rules below treat NA conditions as FALSE.
@@ -290,3 +290,4 @@ and their effect on the results is evaluated in the sensitivity analysis.
 - Cheung A, Zhang S, Stricker C, Srinivasan MV (2007). Animal navigation: the difficulty of moving in a straight line. *Biological Cybernetics* 97: 47-61.
 - Kareiva PM, Shigesada N (1983). Analyzing insect movement as a correlated random walk. *Oecologia* 56: 234-238.
 - Kitamura T, Imafuku M (2015). Behavioural mimicry in flight path of Batesian intraspecific polymorphic butterfly *Papilio polytes*. *Proceedings of the Royal Society B* 282: 20150483.
+- Turchin P (1998). *Quantitative analysis of movement: measuring and modeling population redistribution in animals and plants.* Sinauer Associates.
