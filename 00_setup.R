@@ -123,14 +123,15 @@ if (!use_renv) {
 # =============================================================================
 # 5. FOR MAINTAINERS: CREATE OR UPDATE renv.lock ----
 # =============================================================================
-# Run these lines (only the maintainer, not users) after installing and
-# testing all packages with option B (with install_gls_preprocessing <- TRUE).
-# They create renv.lock, which records the exact version (and GitHub commit)
-# of every package used in the repository.
+# Only for the maintainer, not for users. First install and test all packages
+# with option B (use_renv <- FALSE and install_gls_preprocessing <- TRUE). Then
+# run the lines below: they record in renv.lock the exact version (and GitHub
+# commit) of these packages and of all their dependencies, taken from the
+# packages installed in your R library. No project library is created.
 #
-# renv::init(bare = TRUE)          # creates the renv/ folder, no packages yet
-# renv::install(c(core_pkgs, gls_cran_pkgs, gls_github_pkgs))
-# renv::snapshot(type = "all")     # writes renv.lock
+# install.packages("renv")
+# renv::snapshot(packages = c(core_pkgs, gls_cran_pkgs,
+#                             "GeoLight", "TwGeos", "BAStag", "SGAT"),
+#                lockfile = "renv.lock", prompt = FALSE)
 #
-# After this, commit renv.lock, .Rprofile and renv/activate.R to GitHub.
-
+# After this, commit renv.lock to GitHub.
