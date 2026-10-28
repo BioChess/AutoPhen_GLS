@@ -24,11 +24,11 @@
 # =============================================================================
 
 # Use renv.lock to install the exact package versions (option A)?
-use_renv <- TRUE
+use_renv <- T
 
 # Install also the packages for the optional GLS pre-processing scripts
 # (folder gls_preprocessing/)? Not needed for the main workflow.
-install_gls_preprocessing <- FALSE
+install_gls_preprocessing <- F
 
 if (getRversion() < "4.6.0") {
   warning("This workflow was tested with R 4.6.1. You are using R ",
