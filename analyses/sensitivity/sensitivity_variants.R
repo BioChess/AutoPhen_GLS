@@ -20,9 +20,14 @@
 #             'positions_file' is the file with the positions (by default
 #             data/All_positions.csv).
 #
-# Note: segclust2d does not accept segments shorter than 5 positions
-# (2.5 days with 2 positions per day), so the minimum segment duration can only
-# be tested with longer values.
+# Notes:
+# - segclust2d does not accept segments shorter than 5 positions (2.5 days with
+#   2 positions per day), so the minimum segment duration can only be tested
+#   with longer values.
+# - The minimum duration of a stage was a separate parameter (min_stage_days).
+#   It had no effect on the dates (1.5 to 20 days), because a stage cannot be
+#   shorter than a segment and W-mig-W sequences are already joined. It was
+#   removed: the minimum stage length is now the minimum segment length.
 # =============================================================================
 
 variant <- function(group, parameter, value, default, step, changes = list()) {
@@ -108,12 +113,8 @@ variants <- list(
                          list(positions_file = cdays_file('random200'))),
 
   dep_first    = variant('Additional', 'Departure', 'First exit', 'Last exit',
-                         '03', list(adv = list(departure_rule = 'first_exit'))),
+                         '03', list(adv = list(departure_rule = 'first_exit')))
 
-  minstage_1.5 = variant('Additional', 'Minimum stage duration (days)', 1.5, 2.5,
-                         '03', list(min_stage_days = 1.5)),
-  minstage_5   = variant('Additional', 'Minimum stage duration (days)', 5, 2.5,
-                         '03', list(min_stage_days = 5))
 )
 
 # Treatments of the colony days used above (for 01_prepare_cdays_positions.R)

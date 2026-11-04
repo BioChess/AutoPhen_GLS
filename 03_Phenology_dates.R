@@ -108,7 +108,7 @@ for (i in seq_along(ids)) {
   res <- tryCatch(
     suppressMessages(
       phenology_track(track.ph = track.ph, info = info,
-                      min_stage_length = min_stage_length,
+                      min_stage_length = lmin,
                       kde_level = kde_level, adv = adv,
                       use_equinox = use_equinox,
                       world = world, make_plot = save_plots,

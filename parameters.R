@@ -57,13 +57,7 @@ ncluster <- 5:10
 #   positions per segment, so lmin is never lower than 5.
 min_segment_days <- 2.5
 
-# --- 1.5. Phenological stages [P36] -------------------------------------------
-# min_stage_days: stages shorter than this (days) that are between two equal
-#   stages are joined to them (e.g. a 2-day 'migration' inside the wintering
-#   period becomes wintering).
-min_stage_days <- 2.5
-
-# --- 1.6. Breeding and wintering areas [P41] ----------------------------------
+# --- 1.5. Breeding and wintering areas [P41] ----------------------------------
 # kde_level: percentage of the kernel density estimation (KDE) that defines the
 #   breeding and wintering areas. Arrival = first position inside the KDE;
 #   departure = first position outside the KDE after the last position inside.
@@ -168,6 +162,3 @@ use_equinox <- data_type == "GLS"
 
 # Minimum segment length in positions (segclust2d requires lmin >= 5)
 lmin <- max(5, ceiling(min_segment_days * positions_per_day))
-
-# Minimum stage length in positions
-min_stage_length <- max(1, ceiling(min_stage_days * positions_per_day))

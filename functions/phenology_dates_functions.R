@@ -419,7 +419,9 @@ extract_phen_dates <- function(results_list) {
 #             columns ID, date, x (longitude), y (latitude), Breed2
 #   info      one row of the metadata (geo_trip, Ring, Sp, Colony, Colony.lon,
 #             Colony.lat)
-#   min_stage_length, kde_level, adv   parameters (parameters.R)
+#   min_stage_length  minimum length of a stage (positions): the minimum
+#             length of a segment (lmin in parameters.R)
+#   kde_level, adv   parameters (parameters.R)
 #   world     world map (sf) for the plot; make_plot TRUE to return the map
 #
 # Returns a list with: dates (one row with the phenological dates) and map.

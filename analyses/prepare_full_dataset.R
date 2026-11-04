@@ -93,8 +93,8 @@ if (exists('sens_cdays')) {
 # fixed.
 fix_ends_n <- 2
 incomplete_tracks <- c(
-  # Calonectris (from the '_cdays' files)
-  '1605002002', '1644003001', '1644003002', '19084002001', 'BR50281001001',
+  # Calonectris (from the '_cdays' files; 1605002002 is complete)
+  '1644003001', '1644003002', '19084002001', 'BR50281001001',
   'BR50284001001', 'J459002001', 'X238001001', '1598002001', 'BR50345001001',
   '2280003001',
   # Puffinus puffinus (logger stopped a few days before the return)

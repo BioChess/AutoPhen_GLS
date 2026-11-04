@@ -17,7 +17,6 @@
 derive_parameters <- function(p) {
   p$use_equinox      <- p$data_type == 'GLS'
   p$lmin             <- max(5, ceiling(p$min_segment_days * p$positions_per_day))
-  p$min_stage_length <- max(1, ceiling(p$min_stage_days * p$positions_per_day))
   p
 }
 
@@ -91,7 +90,7 @@ phenology_one <- function(track.ph, info, p, root) {
   res <- tryCatch(
     suppressWarnings(suppressMessages(
       env$phenology_track(track.ph = track.ph, info = info,
-                          min_stage_length = p$min_stage_length,
+                          min_stage_length = p$lmin,
                           kde_level = p$kde_level, adv = p$adv,
                           use_equinox = p$use_equinox, world = NULL,
                           make_plot = FALSE))),

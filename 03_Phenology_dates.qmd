@@ -103,7 +103,8 @@ Because all of this, we check and correct this mistakes and then count the numbe
 ```{r}
 # Correct possible mistakes
 
-track.ph2 <- check_phen(track.ph, "Breed2", min_length = min_stage_length)
+# A stage cannot be shorter than a segment (lmin positions)
+track.ph2 <- check_phen(track.ph, "Breed2", min_length = lmin)
 
 track.ph2$Breed3 <- phen_periods(track.ph2$Breed2)
 

@@ -224,7 +224,7 @@ is saved and used in step 10 instead of the automated one.
 
 | Sub-step | Rule | Parameter |
 |---|---|---|
-| 10.1. Short stages | Short sequences (< `min_stage_days`) between two equal classes take that class (e.g. B-B-mig-B-B → B). | `min_stage_days` = 2.5 days |
+| 10.1. Short stages | Short sequences (shorter than a segment, `lmin`) between two equal classes take that class (e.g. B-B-mig-B-B → B). | `min_segment_days` (no own parameter) |
 | 10.2. Consecutive wintering stages | Migration between two wintering stages, without breeding between them, is part of the wintering stage (W-mig-W → W). | — |
 | 10.3. Numbering of stages | Stages are numbered in order: B1, mig1, W1, mig2, B2. If the track does not start with breeding, the first breeding stage is B2. | — |
 | 10.4. KDE | For each breeding and wintering stage, a kernel density estimation (KDE) is calculated with the positions of that stage only (`track2KBA`). GLS: equinox positions are not used if more than `kde_min_positions` positions remain. Projection: Lambert azimuthal equal-area centred on the positions of the stage. Bandwidth: href. | `kde_level` = 90 %, `adv$kde_min_positions` = 5 |
