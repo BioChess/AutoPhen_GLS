@@ -27,7 +27,7 @@ All scripts are run from the project root (open `AutoPhen_GLS.Rproj`).
 1. Put the reference files in `data/reference/`:
    - `CAL_tracks_supervised.csv`: class of each position after the review (`ID`, `date`, `Breed2`)
    - `CAL_phen_supervised.csv`: dates after the review (`ID`, `B1_dep`, `W1_arr`, `W1_dep`, ..., `B2_arr`)
-   - `Phen_other_analyst.xlsx` (optional): dates of a second analyst (`geo_trip`, `Analyst`, `B1_dep`, `W1_arr`, ...)
+   - `Phen_other_analysts.csv` (optional): dates estimated visually by other analysts, before and without this workflow (`geo_trip`, `Analyst`, `B1_dep`, `W1_arr`, ...)
 2. Only for the colony-day variants: run `01_prepare_cdays_positions.R`.
 3. In `02_run_variants.R`, run `to_run <- 'default'` first. Then run the other
    variants, one or several at a time (e.g. `to_run <- c('kmax_25', 'kmax_35')`).

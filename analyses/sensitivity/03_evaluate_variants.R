@@ -20,22 +20,24 @@
 #   the mean paired difference with 'default' (variant - default, the same
 #   tracks) with a bootstrap 95% confidence interval.
 #
-#   OPTIONAL: if the dates of a second analyst are available
-#   (data/reference/Phen_other_analyst.xlsx), the dates of each variant are
-#   also compared with them, and the difference between the two analysts is
-#   calculated (variability between people).
+#   OPTIONAL: if dates estimated by other analysts are available
+#   (data/reference/Phen_other_analysts.csv; visual analysis of the tracks,
+#   made before and without this workflow), the dates of each variant are
+#   also compared with them, and the difference between these analysts and
+#   the reference is calculated (variability between people).
 #
 # Input:  output/sensitivity/<variant>/
 #         data/reference/CAL_tracks_supervised.csv (ID, date, Breed2)
 #         data/reference/CAL_phen_supervised.csv   (ID, B1_dep, W1_arr, ...)
-#         data/reference/Phen_other_analyst.xlsx   (optional)
+#         data/reference/Phen_other_analysts.csv  (optional; geo_trip,
+#                                                  Analyst, B1_dep, W1_arr, ...)
 # Output: output/sensitivity/_results/sens_per_track.csv
 #         output/sensitivity/_results/sens_summary.csv
 #         output/sensitivity/_results/sens_dates.csv
-#         output/sensitivity/_results/other_analyst.csv (optional)
+#         output/sensitivity/_results/other_analysts.csv (optional)
 # =============================================================================
 
-pacman::p_load('tidyverse', 'readxl')
+pacman::p_load('tidyverse')
 source('analyses/sensitivity/sensitivity_variants.R')
 source('analyses/sensitivity/sensitivity_functions.R')
 set.seed(1)
@@ -58,15 +60,14 @@ ref_dates <- read_csv(file.path('data', 'reference', 'CAL_phen_supervised.csv'),
                       show_col_types = FALSE, col_types = cols(ID = 'c')) %>%
   main_dates()
 
-other_file <- file.path('data', 'reference', 'Phen_other_analyst.xlsx')
+other_file <- file.path('data', 'reference', 'Phen_other_analysts.csv')
 other <- NULL
 if (file.exists(other_file)) {
-  other_raw <- read_excel(other_file) %>%
-    mutate(ID = as.character(geo_trip))
-  other <- other_raw %>%
-    group_by(Analyst) %>%
-    group_modify(~ main_dates(.x)) %>%
-    ungroup()
+  # One row per track (each track was analysed by one person)
+  other <- read_csv(other_file, show_col_types = FALSE,
+                    col_types = cols(geo_trip = 'c')) %>%
+    mutate(ID = geo_trip) %>%
+    main_dates()
 }
 
 
@@ -168,43 +169,45 @@ write_csv(dates_tab, file.path(res_dir, 'sens_dates.csv'))
 
 
 # =============================================================================
-# 5. OPTIONAL: SECOND ANALYST ----
+# 5. OPTIONAL: OTHER ANALYSTS ----
 # =============================================================================
-# Only the tracks with dates of both analysts. For each variant and each
-# analyst: proportion of dates within 3 days. The row 'Analyst vs reference'
-# is the variability between the two people.
+# Only the tracks with dates of the other analysts and of the reference.
+# 'Other analysts vs reference' is the variability between people; each
+# variant is compared with the reference and with the other analysts on the
+# same tracks.
 
 if (!is.null(other)) {
   common <- intersect(other$ID, ref_dates$ID)
-  cat('\nSecond analyst:', length(common), 'tracks in common\n')
+  cat('\nOther analysts:', length(common), 'tracks in common with the reference\n')
 
   compare_dates <- function(a, b) {
     j <- inner_join(a, b, by = 'ID', suffix = c('_a', '_b'))
     e <- sapply(date_names, function(n) as.numeric(j[[paste0(n, '_a')]] -
                                                      j[[paste0(n, '_b')]]))
     e <- matrix(e, ncol = length(date_names), dimnames = list(NULL, date_names))
+    by_date <- apply(e, 2, function(x) round(100 * mean(abs(x) <= 3, na.rm = TRUE), 1))
     tibble(n_tracks = nrow(j), n_dates = sum(!is.na(e)),
            within3 = round(100 * mean(abs(e) <= 3, na.rm = TRUE), 1),
            mean_abs_error = round(mean(abs(e), na.rm = TRUE), 1),
-           bias_median = median(e, na.rm = TRUE))
+           bias_median = median(e, na.rm = TRUE),
+           !!!setNames(as.list(by_date), paste0('within3_', date_names)))
   }
 
-  other_tab <- map_dfr(unique(other$Analyst), function(an) {
-    oa <- other %>% filter(Analyst == an, ID %in% common) %>% select(-Analyst)
-    between_people <- compare_dates(oa, ref_dates %>% filter(ID %in% common)) %>%
-      mutate(variant = 'Analyst vs reference', .before = 1)
-    vs_variants <- map_dfr(done, function(name) {
+  ref_c   <- ref_dates %>% filter(ID %in% common)
+  other_c <- other %>% filter(ID %in% common)
+
+  other_tab <- bind_rows(
+    compare_dates(other_c, ref_c) %>%
+      mutate(variant = 'Other analysts', compared_with = 'Reference', .before = 1),
+    map_dfr(done, function(name) {
       ph <- read_csv(file.path(out_root, name, 'Phenology.csv'),
                      show_col_types = FALSE, col_types = cols(ID = 'c'))
       auto <- main_dates(ph, suffix = '_KDE') %>% filter(ID %in% common)
       bind_rows(
-        compare_dates(auto, ref_dates %>% filter(ID %in% common)) %>%
-          mutate(compared_with = 'Reference'),
-        compare_dates(auto, oa) %>% mutate(compared_with = 'Analyst')) %>%
+        compare_dates(auto, ref_c) %>% mutate(compared_with = 'Reference'),
+        compare_dates(auto, other_c) %>% mutate(compared_with = 'Other analysts')) %>%
         mutate(variant = name, .before = 1)
-    })
-    bind_rows(between_people, vs_variants) %>% mutate(Analyst = an, .before = 1)
-  })
-  write_csv(other_tab, file.path(res_dir, 'other_analyst.csv'))
-  print(other_tab %>% filter(variant %in% c('Analyst vs reference', 'default')))
+    }))
+  write_csv(other_tab, file.path(res_dir, 'other_analysts.csv'))
+  print(other_tab %>% filter(variant %in% c('Other analysts', 'default')), width = Inf)
 }
