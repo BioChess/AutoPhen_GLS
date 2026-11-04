@@ -148,6 +148,13 @@ adv <- list(
   # --- 2.10. Kernel density estimation [P38, P40, P42] ------------------------
   kde_min_positions = 5,    # minimum positions to calculate a KDE
   kde_bandwidth     = "href",
+  kde_bandwidth_mult = 1,   # multiplier of the bandwidth (1 = href)
+  # Departure from a breeding/wintering area: first position outside the KDE
+  # after the LAST position inside it ("last_exit"). Short trips out of the
+  # area before the real departure (e.g. prospecting) are not departures.
+  # "first_exit" (first position outside after the FIRST position inside) is
+  # only used in the sensitivity tests.
+  departure_rule    = "last_exit",
   kde_fallback_grid = 1000,
   kde_fallback_extent = 4
 )

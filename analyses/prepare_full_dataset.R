@@ -74,6 +74,18 @@ calonectris_colony_days <- 'random'
 colony_radius_km <- 100
 set.seed(1)   # random points are the same every time the script is run
 
+# Sensitivity tests (analyses/sensitivity/01_prepare_cdays_positions.R):
+# if a list 'sens_cdays' exists, its values replace the settings above and the
+# positions are saved in another file (data/All_positions.csv is not changed)
+positions_out <- file.path(out_dir, 'All_positions.csv')
+if (exists('sens_cdays')) {
+  calonectris_colony_days <- sens_cdays$mode
+  colony_radius_km        <- sens_cdays$radius
+  positions_out           <- sens_cdays$positions_file
+  check_dir               <- sens_cdays$check_dir
+  dir.create(check_dir, recursive = TRUE, showWarnings = FALSE)
+}
+
 # Start and end of the tracks: the logger is deployed and recovered at the
 # colony, so the first and last 'fix_ends_n' positions are set to the colony
 # coordinates (the same rule used in the SGAT script). For incomplete tracks
@@ -443,6 +455,7 @@ ggsave(file.path(check_dir, 'map_all_tracks.png'), map_all,
 # Map, longitude and latitude of each track, with the positions removed in the
 # cleaning. Only for the species in 'plot_species' (NULL: no plots).
 plot_species <- c('PUFPUF', 'PUFYEL', 'HYDCAS', 'HYDJAB')
+if (exists('sens_cdays')) plot_species <- NULL   # no plots in sensitivity tests
 
 plot_track <- function(id) {
   d <- pos_before_cleaning %>%
@@ -523,8 +536,10 @@ if (length(plot_species) > 0) {
 # =============================================================================
 
 write_csv(all_pos %>% dplyr::select(geo_trip, Date_Time, lon, lat),
-          file.path(out_dir, 'All_positions.csv'))
-write_csv(metadata, file.path(out_dir, 'All_metadata.csv'))
+          positions_out)
+if (!exists('sens_cdays')) {
+  write_csv(metadata, file.path(out_dir, 'All_metadata.csv'))
+}
 
 cat('\nSaved', n_distinct(all_pos$geo_trip), 'tracks and', nrow(all_pos),
-    'positions in', out_dir, '\n')
+    'positions in', positions_out, '\n')

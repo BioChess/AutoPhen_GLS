@@ -29,3 +29,6 @@ data/
 
 # Results of the full dataset (not shared)
 output/full*/
+
+# Results of the sensitivity tests (not shared)
+output/sensitivity/

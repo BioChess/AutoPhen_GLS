@@ -776,12 +776,18 @@ plot_segmentation <- function(segclust = NULL, map = NULL,
 #          Colony.lat)
 #   Kmax, lmin, ncluster, eq_window_days, adv   parameters (parameters.R)
 #   make_plots  TRUE to return the maps of the segmentation
+#   segclust_cache  OPTIONAL file (.rds) to save the result of segclust() and
+#          read it again later (used in the sensitivity tests to avoid
+#          repeating the segmentation when only the classification changes).
+#          NULL (default): not used. The file must only be reused with the
+#          same positions and the same segmentation parameters.
 #
 # Returns a list with: segments (one row per segment), summary (one row per
 # track), track (one row per position) and plot (or NULL).
 
 classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
-                           adv, use_equinox = TRUE, make_plots = FALSE) {
+                           adv, use_equinox = TRUE, make_plots = FALSE,
+                           segclust_cache = NULL) {
 
   geo_trip <- info$geo_trip
   col.lon  <- info$Colony.lon
@@ -823,11 +829,16 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
                                  edge_positions = adv$edge_positions)
 
   # --- Segmentation and clustering -------------------------------------------
-  mode_segclust <- segclust(track_df3,
-                            Kmax = Kmax, lmin = lmin, ncluster = ncluster,
-                            seg.var = c('x', 'y'), order.var = 'x',
-                            diag.var = c('dx', 'dy', 'R2n', 'x', 'y', 'dist'),
-                            subsample = FALSE)
+  if (!is.null(segclust_cache) && file.exists(segclust_cache)) {
+    mode_segclust <- readRDS(segclust_cache)
+  } else {
+    mode_segclust <- segclust(track_df3,
+                              Kmax = Kmax, lmin = lmin, ncluster = ncluster,
+                              seg.var = c('x', 'y'), order.var = 'x',
+                              diag.var = c('dx', 'dy', 'R2n', 'x', 'y', 'dist'),
+                              subsample = FALSE)
+    if (!is.null(segclust_cache)) saveRDS(mode_segclust, segclust_cache)
+  }
   bic_max <- BIC(mode_segclust) %>% filter(BIC == max(BIC))
 
   # --- Classification of segments --------------------------------------------
