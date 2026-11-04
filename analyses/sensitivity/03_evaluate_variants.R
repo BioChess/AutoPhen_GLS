@@ -24,7 +24,8 @@
 #   (data/reference/Phen_other_analysts.csv; visual analysis of the tracks,
 #   made before and without this workflow), the dates of each variant are
 #   also compared with them, and the difference between these analysts and
-#   the reference is calculated (variability between people).
+#   the reference is calculated (variability between people). Arrivals at the
+#   colony that were not estimated from the positions are not used.
 #
 # Input:  output/sensitivity/<variant>/
 #         data/reference/CAL_tracks_supervised.csv (ID, date, Breed2)
@@ -64,10 +65,21 @@ other_file <- file.path('data', 'reference', 'Phen_other_analysts.csv')
 other <- NULL
 if (file.exists(other_file)) {
   # One row per track (each track was analysed by one person)
-  other <- read_csv(other_file, show_col_types = FALSE,
-                    col_types = cols(geo_trip = 'c')) %>%
-    mutate(ID = geo_trip) %>%
-    main_dates()
+  other_raw <- read_csv(other_file, show_col_types = FALSE,
+                        col_types = cols(geo_trip = 'c')) %>%
+    mutate(ID = geo_trip)
+  # Reliability of the arrival at the colony (Uncertain_BA_arr), as coded by
+  # the analysts: 0 = estimated from the positions; 1 = deduced from activity
+  # (wet-dry) data; 2-3 = mean of other birds; 4-5 = birds that stay near the
+  # Canary Islands. Only arrivals with code 0 are used: the others were not
+  # estimated from the positions of the track.
+  if ('Uncertain_BA_arr' %in% names(other_raw)) {
+    not_reliable <- is.na(other_raw$Uncertain_BA_arr) | other_raw$Uncertain_BA_arr != 0
+    other_raw$B2_arr[not_reliable] <- NA
+    cat('Other analysts: B2_arr not used in', sum(not_reliable), 'tracks',
+        '(arrival not estimated from positions)\n')
+  }
+  other <- main_dates(other_raw)
 }
 
 
