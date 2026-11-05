@@ -84,6 +84,8 @@ if (exists('sens_cdays')) {
   positions_out           <- sens_cdays$positions_file
   check_dir               <- sens_cdays$check_dir
   dir.create(check_dir, recursive = TRUE, showWarnings = FALSE)
+  # other random points (test of the effect of the random points)
+  if (!is.null(sens_cdays$seed)) set.seed(sens_cdays$seed)
 }
 
 # Start and end of the tracks: the logger is deployed and recovered at the

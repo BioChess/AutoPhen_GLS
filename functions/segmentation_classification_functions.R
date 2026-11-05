@@ -302,26 +302,34 @@ R2n_limit <- function(x = track, plot = F, Kmax = 3, lmin = 5, ncluster = 3){
   d_col <- sqrt(x$R2n)
   x <- x[c(TRUE, abs(diff(d_col)) >= 0.5), ]
   
-  out <- tryCatch({
-    suppressWarnings({
-      x_segclust <- segclust(x,
-                             Kmax = Kmax,
-                             lmin = lmin,
-                             ncluster = ncluster,
-                             seg.var = c('R2n'),
-                             subsample = F)
-      
-      x_seg<-segment(x_segclust)
-    
-      mean(c(x$R2n[x_seg$begin[2]], x$R2n[x_seg$begin[3]]), na.rm = T)
+  # If segclust2d fails (it can happen with long minimum segments, e.g. in
+  # short tracks), it is tried again with the minimum segment length allowed
+  # by segclust2d (5 positions)
+  x_segclust <- NULL
+  out <- NA
+  for (lm in unique(c(lmin, 5))) {
+    out <- tryCatch({
+      suppressWarnings({
+        x_segclust <- segclust(x,
+                               Kmax = Kmax,
+                               lmin = lm,
+                               ncluster = ncluster,
+                               seg.var = c('R2n'),
+                               subsample = F)
+
+        x_seg <- segment(x_segclust)
+
+        mean(c(x$R2n[x_seg$begin[2]], x$R2n[x_seg$begin[3]]), na.rm = T)
+      })
+    }, error = function(e) {
+      message("An error occurred while calculating changepoints (lmin = ", lm,
+              "): ", e$message)
+      return(NA)
     })
-  }, error = function(e) {
-    message("An error occurred while calculating changepoints: ", e$message)
-    return(NA)
-  })
-  
-  if (plot) {
-    # plot(cpt_result)
+    if (!is.na(out)) break
+  }
+
+  if (plot && !is.null(x_segclust)) {
     plot(x_segclust)
   }
   

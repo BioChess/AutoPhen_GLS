@@ -111,6 +111,11 @@ variants <- list(
                          list(positions_file = cdays_file('random50'))),
   cdays_r200   = variant('Additional', 'Colony days radius (km)', 200, 100, '01',
                          list(positions_file = cdays_file('random200'))),
+  # Other random points within 100 km (another seed of the random numbers)
+  cdays_seed2  = variant('Additional', 'Colony days random seed', 2, 1, '01',
+                         list(positions_file = cdays_file('seed2'))),
+  cdays_seed3  = variant('Additional', 'Colony days random seed', 3, 1, '01',
+                         list(positions_file = cdays_file('seed3'))),
 
   dep_first    = variant('Additional', 'Departure', 'First exit', 'Last exit',
                          '03', list(adv = list(departure_rule = 'first_exit')))
@@ -123,5 +128,7 @@ cdays_variants <- list(
   remove    = list(mode = 'remove', radius = 100),
   anchor    = list(mode = 'anchor', radius = 100),
   random50  = list(mode = 'random', radius = 50),
-  random200 = list(mode = 'random', radius = 200)
+  random200 = list(mode = 'random', radius = 200),
+  seed2     = list(mode = 'random', radius = 100, seed = 2),
+  seed3     = list(mode = 'random', radius = 100, seed = 3)
 )
