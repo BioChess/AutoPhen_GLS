@@ -67,7 +67,8 @@ classify_one <- function(track, info, p, root, cache_file) {
                          eq_window_days = p$eq_window_days, adv = p$adv,
                          use_equinox = p$use_equinox, make_plots = FALSE,
                          segclust_cache = cache_file))),
-    error = function(e) conditionMessage(e))
+    error = function(e) paste0(conditionMessage(e), ' [in: ',
+                               deparse(conditionCall(e))[1], ']'))
   if (is.character(res)) return(list(ok = FALSE, error = res))
   res$summary$run_time_s <- round(as.numeric(difftime(Sys.time(), t0,
                                                       units = 'secs')))
@@ -94,7 +95,8 @@ phenology_one <- function(track.ph, info, p, root) {
                           kde_level = p$kde_level, adv = p$adv,
                           use_equinox = p$use_equinox, world = NULL,
                           make_plot = FALSE))),
-    error = function(e) conditionMessage(e))
+    error = function(e) paste0(conditionMessage(e), ' [in: ',
+                               deparse(conditionCall(e))[1], ']'))
   if (is.character(res)) return(list(ok = FALSE, error = res))
   list(ok = TRUE, dates = res$dates)
 }

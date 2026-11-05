@@ -79,7 +79,7 @@ panel_plot <- function(d, y, ylab, ytrans = 'identity', ybreaks = waiver()) {
     geom_jitter(width = 0.15, height = 0, size = 0.6, alpha = 0.5) +
     scale_fill_manual(values = c(`TRUE` = col_default, `FALSE` = col_variant)) +
     scale_colour_manual(values = c(`TRUE` = col_default, `FALSE` = col_variant)) +
-    scale_x_discrete(labels = function(x) sub('.*\\|', '', x)) +
+    scale_x_discrete(labels = function(x) str_wrap(sub('.*[|]', '', x), 9)) +
     scale_y_continuous(trans = ytrans, breaks = ybreaks) +
     facet_wrap(~ parameter, scales = 'free_x', ncol = 4,
                labeller = label_wrap_gen(25)) +
