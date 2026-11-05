@@ -36,11 +36,18 @@ source('analyses/sensitivity/sensitivity_functions.R')
 #   'default'                       main analysis (run it first)
 #   c('kmax_25', 'kmax_35')         several variants, one after the other
 #   names(variants)                 all variants
-# to_run <- c('default')
-# to_run <- c('kde_75', 'kde_95', 'bw_0.5', 'bw_1.5', 'dep_first',
-            # 'minstage_1.5', 'minstage_5')
-to_run <- c('thr_sa_0.4', 'thr_sa_0.6', 'thr_sin_0.8', 'thr_sin_1.2',
-            'r5_0.65', 'r5_0.85')
+to_run <- c(
+  # base, rápidas y umbrales (~3 h)
+  'default',
+  'kde_75', 'kde_95', 'bw_0.5', 'bw_1.5', 'dep_first',
+  'thr_sa_0.4', 'thr_sa_0.6', 'thr_sin_0.8', 'thr_sin_1.2', 'r5_0.65', 'r5_0.85',
+  # pedidas por los revisores (~40 min cada una; kmax_35 y ncluster_5_15 más)
+  'cdays_keep', 'cdays_remove', 'cdays_anchor',
+  'lmin_3.5', 'lmin_5', 'maxstep_2220', 'maxstep_none',
+  'eqwin_10', 'eqwin_30', 'ncluster_3_6', 'kmax_25',
+  'ncluster_5_15', 'kmax_35',
+  # adicionales
+  'cdays_r50', 'cdays_r200')
 # Parallel R sessions (tracks are processed at the same time). With 6 cores
 # and 16 GB of RAM, 4-5 is a good value. 1 = no parallel processing.
 n_workers <- 4
