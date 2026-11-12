@@ -48,6 +48,8 @@ to_run <- c(
   'ncluster_5_15', 'kmax_35',
   # adicionales
   'cdays_r50', 'cdays_r200')
+
+
 # Parallel R sessions (tracks are processed at the same time). With 6 cores
 # and 16 GB of RAM, 4-5 is a good value. 1 = no parallel processing.
 n_workers <- 4
