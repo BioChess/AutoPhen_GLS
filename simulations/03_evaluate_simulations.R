@@ -68,7 +68,7 @@ tru <- truth_dates %>% transmute(ID, B1_dep, W_arr, W_dep, B2_arr)
 dts <- inner_join(tru, est, by = 'ID', suffix = c('_true', '_est'))
 err <- map_dfr(date_names, function(n) {
   tibble(ID = dts$ID, date = n,
-         error = as.numeric(dts[[paste0(n, '_est')]] - dts[[paste0(n, '_true')]]))
+         diff = as.numeric(dts[[paste0(n, '_est')]] - dts[[paste0(n, '_true')]]))
 })
 
 # Failed tracks (any step)
@@ -76,6 +76,7 @@ failed <- map_dfr(groups, function(g) {
   f <- file.path(out_dir, g, 'Failed_tracks.csv')
   if (file.exists(f)) read_csv(f, show_col_types = FALSE, col_types = cols(ID = 'c')) else NULL
 })
+if (nrow(failed) == 0) failed <- tibble(ID = character(), step = character(), error = character())
 write_csv(failed, file.path(res_dir, 'sim_failed_tracks.csv'))
 cat(nrow(failed), 'failed tracks of', nrow(metadata), '\n')
 
@@ -86,22 +87,22 @@ cat(nrow(failed), 'failed tracks of', nrow(metadata), '\n')
 
 per_track <- scen %>%
   left_join(cls, by = 'ID') %>%
-  left_join(err %>% pivot_wider(names_from = date, values_from = error,
+  left_join(err %>% pivot_wider(names_from = date, values_from = diff,
                                 names_prefix = 'err_'), by = 'ID') %>%
   mutate(failed = ID %in% failed$ID) %>% lev()
 write_csv(per_track, file.path(res_dir, 'sim_per_track.csv'))
 
 summ_dates <- function(d) d %>% summarise(
-  n_dates      = sum(!is.na(error)),
-  missing      = sum(is.na(error)),
-  bias_median  = median(error, na.rm = TRUE),
-  abs_median   = median(abs(error), na.rm = TRUE),
-  abs_mean     = round(mean(abs(error), na.rm = TRUE), 1),
-  abs_p90      = unname(quantile(abs(error), 0.9, na.rm = TRUE)),
-  abs_max      = max(abs(error), na.rm = TRUE),
-  within1_pct  = round(100 * mean(abs(error) <= 1, na.rm = TRUE), 1),
-  within3_pct  = round(100 * mean(abs(error) <= 3, na.rm = TRUE), 1),
-  within7_pct  = round(100 * mean(abs(error) <= 7, na.rm = TRUE), 1),
+  n_dates      = sum(!is.na(diff)),
+  missing      = sum(is.na(diff)),
+  bias_median  = median(diff, na.rm = TRUE),
+  abs_median   = median(abs(diff), na.rm = TRUE),
+  abs_mean     = round(mean(abs(diff), na.rm = TRUE), 1),
+  abs_p90      = unname(quantile(abs(diff), 0.9, na.rm = TRUE)),
+  abs_max      = max(abs(diff), na.rm = TRUE),
+  within1_pct  = round(100 * mean(abs(diff) <= 1, na.rm = TRUE), 1),
+  within3_pct  = round(100 * mean(abs(diff) <= 3, na.rm = TRUE), 1),
+  within7_pct  = round(100 * mean(abs(diff) <= 7, na.rm = TRUE), 1),
   .groups = 'drop')
 
 err_s <- err %>% left_join(scen, by = 'ID') %>% lev() %>%
@@ -175,8 +176,8 @@ print(tab_check, width = Inf)
 # 5. FIGURE ----
 # =============================================================================
 
-g <- ggplot(err_s %>% filter(!is.na(error)),
-            aes(movement, error, fill = distance)) +
+g <- ggplot(err_s %>% filter(!is.na(diff)),
+            aes(movement, diff, fill = distance)) +
   geom_hline(yintercept = 0, colour = 'grey40') +
   geom_boxplot(outlier.size = 0.5, linewidth = 0.3,
                position = position_dodge(width = 0.8)) +
