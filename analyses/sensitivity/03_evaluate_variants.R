@@ -111,6 +111,17 @@ base <- per_track %>% filter(variant == 'default') %>%
   select(ID, class_0 = class_agreement, within3_0 = prop_within3,
          mae_0 = mean_abs_error)
 
+# Median and 90th percentile of the absolute error of all dates (the mean is
+# very sensitive to a few tracks with stages detected in the wrong place)
+abs_err <- per_track %>%
+  select(variant, starts_with('err_')) %>%
+  pivot_longer(starts_with('err_'), values_to = 'error') %>%
+  filter(!is.na(error)) %>%
+  group_by(variant) %>%
+  summarise(dates_median_abs_err = median(abs(error)),
+            dates_p90_abs_err = unname(quantile(abs(error), 0.9)),
+            .groups = 'drop')
+
 summary_tab <- per_track %>%
   left_join(base, by = 'ID') %>%
   group_by(variant, group, parameter, value, default, step) %>%
@@ -142,6 +153,8 @@ summary_tab <- per_track %>%
          d_within3_low  = map_dbl(d_within3_ci, 1), d_within3_high  = map_dbl(d_within3_ci, 2),
          d_mae_low      = map_dbl(d_mae_ci, 1),     d_mae_high      = map_dbl(d_mae_ci, 2)) %>%
   select(-ends_with('_ci')) %>%
+  left_join(abs_err, by = 'variant') %>%
+  relocate(dates_median_abs_err, dates_p90_abs_err, .after = dates_mean_abs_err) %>%
   mutate(across(starts_with('d_'), ~ round(.x, 2)),
          variant = factor(variant, levels = names(variants))) %>%
   arrange(variant)
