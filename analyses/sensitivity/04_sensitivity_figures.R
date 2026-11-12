@@ -127,6 +127,9 @@ p_sum <- ggplot(sum_long, aes(diff, label, colour = group)) +
                 orientation = 'y',
                  na.rm = TRUE) +
   geom_point(size = 2, na.rm = TRUE) +
+  # variants that only change the dates: the classification is the same
+  geom_text(data = filter(sum_long, is.na(diff)), aes(x = 0, label = 'not affected'),
+            colour = 'grey50', size = 2.8, hjust = 1.1) +
   scale_colour_manual(values = c(Requested = col_default, Additional = 'grey35'),
                       name = NULL) +
   facet_grid(parameter ~ metric, scales = 'free', space = 'free_y',
