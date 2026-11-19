@@ -72,6 +72,10 @@ p <- list(
                      long = c(6000, 9000)),
   bearing_deg = c(0, 360),            # direction of the wintering area (random)
   speed_km_day = c(300, 600),         # migration speed
+  # loop migration: waypoints of the outward and return routes (see
+  # simulation_functions.R)
+  waypoint_partition = 2:4,           # waypoint at D/k from one end (k = 2-4)
+  waypoint_angle_deg = c(36, 60),     # angle from the straight line (pi/5-pi/3)
   range_radius_km = c(100, 250),      # radius with 95% of the positions around
                                       # the centre (marcher A = pi * r^2)
   tau_z_days = c(2.5, 3.5),           # position autocorrelation (marcher tau.z)
@@ -82,9 +86,8 @@ p <- list(
   trip_gap_days = c(1, 15),           # time at the breeding site between trips
   trip_days = c(4, 20),               # duration of a trip
   trip_km = c(150, 1000),             # maximum distance from the breeding site
-  # stopover (movement 'stopover')
+  # stopover (movement 'stopover'): at the waypoint of the outward route
   stopover_days = c(5, 15),
-  stopover_position = c(0.3, 0.7),    # proportion of the route
   # second wintering area (movement 'two_W')
   w2_km = c(500, 1500),               # distance between the two wintering areas
 
@@ -206,21 +209,9 @@ write_csv(err_summary, file.path(out_dir, 'checks', 'error_summary.csv'))
 for (d in c('short', 'medium', 'long')) {
   ex <- scenarios %>% filter(distance == d, rep == 1) %>% pull(sim_id)
   dat <- truth_pos %>% filter(geo_trip %in% ex) %>%
-    left_join(metadata %>% select(geo_trip, movement, error), by = 'geo_trip') %>%
-    mutate(error = factor(error, levels = c('none', 'gls', 'gls_eq')))
-  g <- ggplot(dat) +
-    geom_path(aes(x_true_km, y_true_km), colour = 'grey40', linewidth = 0.3) +
-    geom_point(aes(x_km, y_km, colour = stage), size = 0.6) +
-    annotate('point', x = 0, y = 0, shape = 18, size = 3) +
-    scale_colour_manual(values = c(B = '#2a6f97', mig = '#e09f3e', W = '#9e2a2b')) +
-    coord_equal() +
-    facet_grid(error ~ movement) +
-    labs(title = paste('Example tracks:', d, 'distance'),
-         subtitle = paste('Grey line: true track; points: observed positions',
-                          '(colour = true class); diamond: breeding site'),
-         x = 'x (km)', y = 'y (km)', colour = 'True class') +
-    theme_bw(base_size = 9)
+    left_join(metadata %>% select(geo_trip, movement, error), by = 'geo_trip')
+  g <- plot_sim_tracks(dat, title = paste('Example tracks:', distance_labels[[d]]))
   ggsave(file.path(out_dir, 'checks', paste0('examples_', d, '.png')), g,
-         width = 26, height = 18, units = 'cm', dpi = 200)
+         width = 26, height = 19, units = 'cm', dpi = 200)
 }
 cat('Done:', nrow(metadata), 'tracks,', nrow(positions), 'positions\n')

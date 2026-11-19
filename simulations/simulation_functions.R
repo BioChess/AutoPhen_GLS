@@ -109,6 +109,21 @@ simulate_track <- function(sc, p) {
   speed_out <- runif(1, p$speed_km_day[1], p$speed_km_day[2])
   speed_in  <- runif(1, p$speed_km_day[1], p$speed_km_day[2])
 
+  # Loop migration (as in the original simulations): the outward and return
+  # routes pass through two different waypoints. One waypoint is at a distance
+  # D/k (k = 2-4) from the breeding site and the other at D/k from the
+  # wintering area, 36-60 degrees to one side of the straight line. If both
+  # are on the same side the track has an 8-shape; if not, a round shape.
+  side <- function() sample(c(-1, 1), 1) * runif(1, p$waypoint_angle_deg[1],
+                                                p$waypoint_angle_deg[2])
+  P_B <- move_point(0, 0, dist_w / sample(p$waypoint_partition, 1), bearing_w + side())
+  P_W <- move_point(W2[['x']], W2[['y']], dist_w / sample(p$waypoint_partition, 1),
+                    bearing_w + 180 + side())
+  if (runif(1) < 0.5) { P_out <- P_B; P_in <- P_W } else { P_out <- P_W; P_in <- P_B }
+  if (sc$movement == 'two_W') P_out <- P_B   # P_W is near the second area
+  seg_len <- function(a, b) sqrt(sum((b - a)^2))
+  O <- c(x = 0, y = 0)
+
   # --- Dates (true phenology) -----------------------------------------------------
   # Migration away from the equinoxes ('none', 'gls') or overlapping them
   # ('gls_eq'). Dates are drawn until the wintering stay is long enough.
@@ -122,13 +137,16 @@ simulate_track <- function(sc, p) {
   for (k in 1:50) {
     dep <- rdate(timing$B1_dep, yr1)
     arr <- rdate(timing$B2_arr, yr1 + 1)
-    # outward migration: straight line (+ stopover); return: straight line
-    route_out <- dist_w
-    n_out <- day(route_out / speed_out)
+    # outward route: breeding site -> waypoint (stopover) -> wintering area
+    n_out1 <- max(1, day(seg_len(O, P_out) / speed_out))
+    n_out2 <- max(1, day(seg_len(P_out, W1) / speed_out))
+    n_out  <- n_out1 + n_out2
     n_stop <- if (sc$movement == 'stopover') day(runif(1, p$stopover_days[1],
                                                       p$stopover_days[2])) else 0
-    dist_back <- sqrt(W2[['x']]^2 + W2[['y']]^2)
-    n_in <- day(dist_back / speed_in)
+    # return route: (last) wintering area -> waypoint -> breeding site
+    n_in1 <- max(1, day(seg_len(W2, P_in) / speed_in))
+    n_in2 <- max(1, day(seg_len(P_in, O) / speed_in))
+    n_in  <- n_in1 + n_in2
     n_w2move <- if (sc$movement == 'two_W') {
       day(sqrt(sum((W2 - W1)^2)) / speed_out)
     } else 0
@@ -144,19 +162,13 @@ simulate_track <- function(sc, p) {
 
   # --- Legs of the centre of attraction -------------------------------------------
   legs <- breeding_legs(t_dep, 'B1', trips, p)
-  if (sc$movement == 'stopover') {
-    f <- runif(1, p$stopover_position[1], p$stopover_position[2])
-    S <- move_point(0, 0, dist_w * f, bearing_w + runif(1, -20, 20))
-    n1 <- max(1, round(n_out * f))
-    legs <- c(legs, list(
-      list(type = 'move', x = S[['x']], y = S[['y']], n = n1, stage = 'mig', label = 'mig1'),
-      list(type = 'stay', x = S[['x']], y = S[['y']], n = n_stop, stage = 'mig', label = 'stopover'),
-      list(type = 'move', x = W1[['x']], y = W1[['y']], n = max(1, n_out - n1),
-           stage = 'mig', label = 'mig1')))
-  } else {
-    legs <- c(legs, list(list(type = 'move', x = W1[['x']], y = W1[['y']], n = n_out,
-                              stage = 'mig', label = 'mig1')))
-  }
+  # outward migration; the stopover (if any) is at the waypoint
+  legs <- c(legs, list(
+    list(type = 'move', x = P_out[['x']], y = P_out[['y']], n = n_out1, stage = 'mig', label = 'mig1')),
+    if (n_stop > 0) list(list(type = 'stay', x = P_out[['x']], y = P_out[['y']],
+                              n = n_stop, stage = 'mig', label = 'stopover')),
+    list(list(type = 'move', x = W1[['x']], y = W1[['y']], n = n_out2, stage = 'mig',
+              label = 'mig1')))
   if (sc$movement == 'two_W') {
     n_w1 <- round(n_w * runif(1, 0.35, 0.65))
     legs <- c(legs, list(
@@ -167,8 +179,9 @@ simulate_track <- function(sc, p) {
     legs <- c(legs, list(list(type = 'stay', x = W1[['x']], y = W1[['y']], n = n_w,
                               stage = 'W', label = 'W1')))
   }
-  legs <- c(legs, list(list(type = 'move', x = 0, y = 0, n = n_in, stage = 'mig',
-                            label = 'mig2')),
+  legs <- c(legs, list(
+    list(type = 'move', x = P_in[['x']], y = P_in[['y']], n = n_in1, stage = 'mig', label = 'mig2'),
+    list(type = 'move', x = 0, y = 0, n = n_in2, stage = 'mig', label = 'mig2')),
             breeding_legs(n_end, 'B2', trips, p))
   mu <- legs_to_mu(legs)
 
@@ -280,4 +293,67 @@ km_to_lonlat <- function(x, y, ref_lon, ref_lat) {
   pts <- sf::st_as_sf(data.frame(x = x, y = y), coords = c('x', 'y'), crs = aeqd)
   ll <- sf::st_coordinates(sf::st_transform(pts, 4326))
   data.frame(lon = ll[, 1], lat = ll[, 2])
+}
+
+
+# =============================================================================
+# 5. LABELS AND PLOTS ----
+# =============================================================================
+# Same colours and point style as the maps of the workflow
+# (functions/segmentation_classification_functions.R)
+
+class_labels    <- c(B = 'Breeding', mig = 'Migration', W = 'Wintering')
+class_colours   <- c(Breeding = 'orange2', Migration = 'grey55', Wintering = 'steelblue')
+movement_labels <- c(base = 'Base', foraging = 'Foraging trips',
+                     stopover = 'Stopover', two_W = 'Two wintering areas')
+error_labels    <- c(none = 'No error (GPS-like)', gls = 'GLS-like error',
+                     gls_eq = 'GLS-like error,\nmigration at equinoxes')
+distance_labels <- c(short = 'Short (800-2000 km)', medium = 'Medium (3000-5000 km)',
+                     long = 'Long (6000-9000 km)')
+
+# Readable labels for the scenario columns
+label_scenarios <- function(d) {
+  d %>% dplyr::mutate(
+    dplyr::across(dplyr::any_of('movement'),
+                  ~ factor(movement_labels[.x], levels = movement_labels)),
+    dplyr::across(dplyr::any_of('error'),
+                  ~ factor(error_labels[.x], levels = error_labels)),
+    dplyr::across(dplyr::any_of('distance'),
+                  ~ factor(distance_labels[.x], levels = distance_labels)))
+}
+
+theme_sim <- ggplot2::theme_bw(base_size = 10) +
+  ggplot2::theme(panel.grid.minor = ggplot2::element_blank(),
+                 panel.grid.major = ggplot2::element_line(colour = 'grey92'),
+                 panel.border = ggplot2::element_rect(colour = 'black', fill = NA),
+                 strip.background = ggplot2::element_rect(fill = 'white', colour = 'black'),
+                 strip.text = ggplot2::element_text(face = 'bold'),
+                 legend.position = 'bottom',
+                 legend.title = ggplot2::element_text(face = 'bold'))
+
+# Example tracks: rows = observation error, columns = movement type.
+# dat: rows of sim_truth_positions.csv (+ movement and error), one track per
+# panel.
+plot_sim_tracks <- function(dat, title = NULL) {
+  dat <- dat %>%
+    label_scenarios() %>%
+    dplyr::mutate(Class = factor(class_labels[stage], levels = class_labels))
+  ggplot2::ggplot(dat) +
+    ggplot2::geom_path(ggplot2::aes(x_true_km, y_true_km), colour = 'grey20',
+                       linewidth = 0.25, alpha = 0.7) +
+    ggplot2::geom_point(ggplot2::aes(x_km, y_km, fill = Class), shape = 21,
+                        colour = 'black', stroke = 0.15, size = 1.3) +
+    ggplot2::annotate('point', x = 0, y = 0, shape = 23, size = 2.6,
+                      fill = NA, colour = 'black', stroke = 0.9) +
+    ggplot2::scale_fill_manual(values = class_colours, name = 'True class',
+                               drop = FALSE) +
+    ggplot2::guides(fill = ggplot2::guide_legend(override.aes = list(size = 3))) +
+    ggplot2::coord_equal() +
+    ggplot2::scale_x_continuous(labels = function(x) format(x, big.mark = ',')) +
+    ggplot2::scale_y_continuous(labels = function(x) format(x, big.mark = ',')) +
+    ggplot2::facet_grid(error ~ movement) +
+    ggplot2::labs(title = title, x = 'x (km)', y = 'y (km)',
+                  caption = paste('Line: true track. Points: observed positions,',
+                                  'coloured by true class. Diamond: breeding site.')) +
+    theme_sim
 }

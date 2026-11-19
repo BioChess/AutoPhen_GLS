@@ -16,7 +16,7 @@
 #                classified (does the agreement score predict errors?).
 #
 # Input:  simulations/data/ (truth), output/simulations/<gls|none>/
-# Output: output/simulations/_results/ (tables and figures)
+# Output: output/simulations/_results/ (tables; figures in 04_simulation_figures.R)
 # =============================================================================
 
 pacman::p_load('tidyverse')
@@ -172,21 +172,4 @@ write_csv(tab_check, file.path(res_dir, 'sim_flagged_segments.csv'))
 print(tab_check, width = Inf)
 
 
-# =============================================================================
-# 5. FIGURE ----
-# =============================================================================
-
-g <- ggplot(err_s %>% filter(!is.na(diff)),
-            aes(movement, diff, fill = distance)) +
-  geom_hline(yintercept = 0, colour = 'grey40') +
-  geom_boxplot(outlier.size = 0.5, linewidth = 0.3,
-               position = position_dodge(width = 0.8)) +
-  scale_fill_manual(values = c(short = '#cfe1ee', medium = '#7fb0d1', long = '#2a6f97')) +
-  scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
-                     breaks = c(-100, -30, -10, -3, -1, 0, 1, 3, 10, 30, 100)) +
-  facet_grid(error ~ date) +
-  labs(x = NULL, y = 'Estimated - true date (days)', fill = 'Distance') +
-  theme_bw(base_size = 9) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1), legend.position = 'bottom')
-ggsave(file.path(res_dir, 'fig_sim_date_errors.png'), g, width = 19, height = 14,
-       units = 'cm', dpi = 300)
+# Figures: simulations/04_simulation_figures.R
