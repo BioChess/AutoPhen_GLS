@@ -161,8 +161,9 @@ ratio_plot <- function(d, x, xlab, y, ylab, ytrans = 'identity', ybreaks = waive
   ggplot(d, aes(.data[[x]], .data[[y]])) +
     geom_point(aes(fill = movement), shape = 21, colour = 'black', stroke = 0.15,
                size = 1.6, alpha = 0.8) +
-    geom_smooth(method = 'loess', formula = y ~ x, se = TRUE, colour = 'black',
-                linewidth = 0.5, fill = 'grey80') +
+    # trend (loess), without confidence band
+    geom_smooth(method = 'loess', formula = y ~ x, se = FALSE, colour = 'black',
+                linewidth = 0.6) +
     scale_x_log10() +
     scale_y_continuous(trans = ytrans, breaks = ybreaks) +
     scale_fill_manual(values = movement_colours, name = 'Movement') +
