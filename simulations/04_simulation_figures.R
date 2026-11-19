@@ -146,7 +146,7 @@ g_err <- ggplot(errs, aes(movement, diff, fill = distance)) +
   scale_x_discrete(labels = label_wrap(10)) +
   facet_grid(error ~ date) +
   labs(x = NULL, y = 'Estimated - true date (days)',
-       caption = 'Dashed lines: ±3 days. Pseudo-logarithmic scale.') +
+       caption = 'Dashed lines: 3 days before and after the true date. Pseudo-logarithmic scale.') +
   theme_sim
 save_fig(g_err, 'fig_sim_date_errors', 24, 18)
 
