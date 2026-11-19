@@ -2,27 +2,36 @@
 # SIMULATIONS 01: SIMULATED MIGRATORY TRACKS AT REAL SCALES
 # =============================================================================
 # Author: Diego Vicente-Sastre
-# Description: Simulates tracks of a seabird that breeds in a colony
-#              (Veneguera, Gran Canaria), migrates to one or two wintering
-#              areas and comes back. Movement is simulated with marcher
-#              (Gurarie et al. 2017) around a moving centre of attraction, in
-#              km and days. Observation error of different tracking methods is
-#              added to the true positions.
+# Description: Simulates tracks of a central-place forager that breeds at a
+#              breeding site, migrates to one or two wintering areas and comes
+#              back. The tracks are not linked to any place: they are simulated
+#              on a plane in km, with the breeding site at the origin (0, 0)
+#              and the wintering area in a random direction. Movement is
+#              simulated with marcher (Gurarie et al. 2017) around a moving
+#              centre of attraction, with time in days. Observation error of
+#              different tracking methods is added to the true positions.
 #
 #   Scenarios (full factorial, n_rep tracks each):
 #     distance  short (800-2000 km), medium (3000-5000 km), long (6000-9000 km)
 #     movement  base      one breeding area and one wintering area
-#               foraging  central-place foraging trips (4-20 days) from the colony during
-#                         the breeding periods
+#               foraging  central-place foraging trips (4-20 days) from the
+#                         breeding site during the breeding periods
 #               stopover  a stopover during the outward migration
 #               two_W     two wintering areas
 #     error     none      no observation error (e.g. GPS)
-#               gls       GLS-like error (larger in latitude, autocorrelated,
-#                         latitude error inflated around the equinoxes,
-#                         missing positions); migrations away from the
-#                         equinoxes
+#               gls       GLS-like error (larger in the north-south axis,
+#                         autocorrelated, north-south error inflated around
+#                         the equinoxes, missing positions); migrations away
+#                         from the equinoxes
 #               gls_eq    the same error, with migrations overlapping the
 #                         equinoxes
+#
+#   Coordinates for the workflow: the workflow needs longitude and latitude.
+#   The plane (km) is placed on an arbitrary reference point (ref_lon,
+#   ref_lat) with an azimuthal equidistant projection. The workflow projects
+#   the tracks again with the same projection centred on the breeding site, so
+#   it works with the same km coordinates and the results do not depend on
+#   the reference point. Only the dates have a real meaning (equinoxes).
 #
 # Output (simulations/data/):
 #   sim_positions.csv        observed positions (geo_trip, Date_Time, lon, lat):
@@ -30,9 +39,9 @@
 #   sim_metadata.csv         one row per track (format of data/All_metadata.csv
 #                            + scenario)
 #   sim_truth_dates.csv      true dates and parameters of each track
-#   sim_truth_positions.csv  true position and true class (B, mig, W) at each
-#                            observed time
-#   checks/                  maps of example tracks and summary of the error
+#   sim_truth_positions.csv  observed and true positions in km, and true class
+#                            (B, mig, W) at each observed time
+#   checks/                  plots of example tracks and summary of the error
 #
 # Run from the project root. Needs the package marcher (CRAN).
 # =============================================================================
@@ -42,28 +51,26 @@
 # 1. PACKAGES AND SETTINGS ----
 # =============================================================================
 
-pacman::p_load('tidyverse', 'sf', 'marcher', 'patchwork',
-               'rnaturalearth', 'rnaturalearthdata')
+pacman::p_load('tidyverse', 'sf', 'marcher')
 source('simulations/simulation_functions.R')
 
 out_dir <- file.path('simulations', 'data')
 dir.create(file.path(out_dir, 'checks'), recursive = TRUE, showWarnings = FALSE)
 
 p <- list(
-  # Colony (Veneguera, Gran Canaria)
-  colony = 'Veneguera', col_lon = -15.789, col_lat = 27.844,
   positions_per_day = 2,
   start_date = '2021-07-01',          # first position (breeding period)
+  # Reference point to convert km to longitude/latitude (arbitrary; see above)
+  ref_lon = 0, ref_lat = 0,
 
   # Number of tracks per scenario
   n_rep = 25,
 
   # --- Movement --------------------------------------------------------------------
-  # Distance from the colony to the (first) wintering area, by class (km)
+  # Distance from the breeding site to the (first) wintering area, by class (km)
   distance_km = list(short = c(800, 2000), medium = c(3000, 5000),
                      long = c(6000, 9000)),
-  bearing_deg = c(190, 230),          # direction of the wintering area (from north;
-                                      # south-west, along the Atlantic)
+  bearing_deg = c(0, 360),            # direction of the wintering area (random)
   speed_km_day = c(300, 600),         # migration speed
   range_radius_km = c(100, 250),      # radius with 95% of the positions around
                                       # the centre (marcher A = pi * r^2)
@@ -72,9 +79,9 @@ p <- list(
   min_wintering_days = 30,            # minimum stay in each wintering area
   after_arrival_days = c(15, 45),     # breeding period after the return
   # foraging trips (movement 'foraging')
-  trip_gap_days = c(1, 15),           # time at the colony between trips
+  trip_gap_days = c(1, 15),           # time at the breeding site between trips
   trip_days = c(4, 20),               # duration of a trip
-  trip_km = c(150, 1000),             # maximum distance from the colony
+  trip_km = c(150, 1000),             # maximum distance from the breeding site
   # stopover (movement 'stopover')
   stopover_days = c(5, 15),
   stopover_position = c(0.3, 0.7),    # proportion of the route
@@ -89,9 +96,10 @@ p <- list(
 
   # --- Observation error ----------------------------------------------------------
   error = list(
-    # GLS: mean error of about 150-200 km, larger in latitude (Phillips et al.
-    # 2004; Halpin et al. 2021); errors correlated between consecutive positions;
-    # latitude almost uninformative within +-eq_days of each equinox
+    # GLS: mean error of about 150-200 km, larger in latitude (north-south
+    # axis) (Phillips et al. 2004; Halpin et al. 2021); errors correlated
+    # between consecutive positions; north-south position almost
+    # uninformative within +-eq_days of each equinox
     gls = list(sd_lon_km = 90, sd_lat_km = 180, phi = 0.5,
                eq_days = 15, eq_lat_factor = 4, eq_phi = 0.9,
                p_missing = 0.03, gaps_per_track = 1, gap_days = c(1, 3)),
@@ -132,17 +140,17 @@ for (i in seq_len(nrow(scenarios))) {
   s  <- simulate_track(sc, p)
   obs <- add_error(s$true, sc$error, p, sc$seed)
 
-  # The first and last two positions are set at the colony (known deployment
-  # and recovery), as in the real data (analyses/prepare_full_dataset.R)
+  # The first and last two positions are set at the breeding site (known
+  # deployment and recovery), as in the real data
   n <- nrow(obs)
   obs$x[c(1:2, (n - 1):n)] <- 0; obs$y[c(1:2, (n - 1):n)] <- 0
 
-  ll  <- km_to_lonlat(obs$x, obs$y, p$col_lon, p$col_lat)
-  llt <- km_to_lonlat(obs$x_true, obs$y_true, p$col_lon, p$col_lat)
+  ll <- km_to_lonlat(obs$x, obs$y, p$ref_lon, p$ref_lat)
   positions[[i]] <- tibble(geo_trip = sc$sim_id, Date_Time = obs$Date_Time,
                            lon = ll$lon, lat = ll$lat)
   truth_pos[[i]] <- tibble(geo_trip = sc$sim_id, Date_Time = obs$Date_Time,
-                           lon_true = llt$lon, lat_true = llt$lat,
+                           x_km = obs$x, y_km = obs$y,
+                           x_true_km = obs$x_true, y_true_km = obs$y_true,
                            error_km = sqrt((obs$x - obs$x_true)^2 + (obs$y - obs$y_true)^2),
                            stage = obs$stage, leg = obs$leg)
   truth_dates[[i]] <- s$dates
@@ -152,13 +160,14 @@ positions   <- bind_rows(positions)
 truth_pos   <- bind_rows(truth_pos)
 truth_dates <- bind_rows(truth_dates)
 
+# The breeding site is the reference point (0, 0 km)
 metadata <- positions %>%
   group_by(geo_trip) %>%
   summarise(n_positions = n(), start_date = min(Date_Time), end_date = max(Date_Time),
             .groups = 'drop') %>%
   mutate(Ring = geo_trip, Sp = 'SIM', Species = 'Simulated',
-         Common_name = 'Simulated seabird', Colony = p$colony,
-         Colony.lat = p$col_lat, Colony.lon = p$col_lon,
+         Common_name = 'Simulated track', Colony = 'Breeding site',
+         Colony.lat = p$ref_lat, Colony.lon = p$ref_lon,
          duration_days = round(as.numeric(difftime(end_date, start_date, units = 'days')))) %>%
   left_join(truth_dates %>% select(geo_trip = sim_id, distance, movement, error),
             by = 'geo_trip') %>%
@@ -177,37 +186,39 @@ saveRDS(p, file.path(out_dir, 'sim_settings.rds'))
 # =============================================================================
 
 # Observation error (km), outside and inside the equinox windows
+eq_dist <- function(d, md) {
+  abs(as.numeric(difftime(d, as.POSIXct(paste0(format(d, '%Y'), md), tz = 'UTC'),
+                          units = 'days')))
+}
 err_summary <- truth_pos %>%
   left_join(metadata %>% select(geo_trip, error), by = 'geo_trip') %>%
   filter(error != 'none') %>%
-  mutate(eq = (abs(as.numeric(difftime(Date_Time, as.POSIXct(paste0(format(Date_Time, '%Y'), '-09-22'), tz = 'UTC'), units = 'days'))) <= p$error$gls$eq_days) |
-              (abs(as.numeric(difftime(Date_Time, as.POSIXct(paste0(format(Date_Time, '%Y'), '-03-20'), tz = 'UTC'), units = 'days'))) <= p$error$gls$eq_days)) %>%
+  mutate(eq = eq_dist(Date_Time, '-09-22') <= p$error$gls$eq_days |
+              eq_dist(Date_Time, '-03-20') <= p$error$gls$eq_days) %>%
   group_by(error, equinox_window = eq) %>%
   summarise(n = n(), median_km = round(median(error_km)), mean_km = round(mean(error_km)),
             p90_km = round(quantile(error_km, 0.9)), .groups = 'drop')
 print(err_summary)
 write_csv(err_summary, file.path(out_dir, 'checks', 'error_summary.csv'))
 
-# Maps: one example track per movement and error, for each distance class
-world <- ne_countries(scale = 'medium', returnclass = 'sf')
+# Plots: one example track per movement and error, for each distance class
+# (km from the breeding site; no map, the tracks are not linked to any place)
 for (d in c('short', 'medium', 'long')) {
   ex <- scenarios %>% filter(distance == d, rep == 1) %>% pull(sim_id)
-  dat <- positions %>% filter(geo_trip %in% ex) %>%
-    left_join(truth_pos %>% select(geo_trip, Date_Time, stage, lon_true, lat_true),
-              by = c('geo_trip', 'Date_Time')) %>%
-    left_join(metadata %>% select(geo_trip, movement, error), by = 'geo_trip')
-  g <- ggplot() +
-    geom_sf(data = world, fill = 'grey85', colour = NA) +
-    geom_path(data = dat, aes(lon_true, lat_true), colour = 'grey40', linewidth = 0.3) +
-    geom_point(data = dat, aes(lon, lat, colour = stage), size = 0.6) +
-    geom_point(data = tibble(lon = p$col_lon, lat = p$col_lat), aes(lon, lat),
-               shape = 18, size = 3) +
+  dat <- truth_pos %>% filter(geo_trip %in% ex) %>%
+    left_join(metadata %>% select(geo_trip, movement, error), by = 'geo_trip') %>%
+    mutate(error = factor(error, levels = c('none', 'gls', 'gls_eq')))
+  g <- ggplot(dat) +
+    geom_path(aes(x_true_km, y_true_km), colour = 'grey40', linewidth = 0.3) +
+    geom_point(aes(x_km, y_km, colour = stage), size = 0.6) +
+    annotate('point', x = 0, y = 0, shape = 18, size = 3) +
     scale_colour_manual(values = c(B = '#2a6f97', mig = '#e09f3e', W = '#9e2a2b')) +
-    coord_sf(xlim = range(dat$lon) + c(-5, 5), ylim = range(dat$lat) + c(-5, 5)) +
+    coord_equal() +
     facet_grid(error ~ movement) +
     labs(title = paste('Example tracks:', d, 'distance'),
-         subtitle = 'Grey line: true track; points: observed positions (colour = true class)',
-         x = NULL, y = NULL, colour = 'True class') +
+         subtitle = paste('Grey line: true track; points: observed positions',
+                          '(colour = true class); diamond: breeding site'),
+         x = 'x (km)', y = 'y (km)', colour = 'True class') +
     theme_bw(base_size = 9)
   ggsave(file.path(out_dir, 'checks', paste0('examples_', d, '.png')), g,
          width = 26, height = 18, units = 'cm', dpi = 200)

@@ -8,17 +8,19 @@
 #
 # How a track is built:
 #   1. The ATTRACTION CENTRE (mu) of the animal moves between stationary
-#      areas: colony -> (stopover) -> wintering area(s) -> colony. During the
-#      breeding periods the centre can also make out-and-back excursions from
-#      the colony (central-place foraging trips).
+#      areas: breeding site -> (stopover) -> wintering area(s) -> breeding
+#      site. During the breeding periods the centre can also make
+#      out-and-back excursions from the breeding site (central-place foraging
+#      trips).
 #   2. marcher::simulate_shift() simulates the movement of the animal around
 #      that centre (Ornstein-Uhlenbeck process with position and velocity
 #      autocorrelation; Gurarie et al. 2017).
 #   3. Observation error is added to the true positions (none, PTT-like or
 #      GLS-like, with or without equinox effects and data gaps).
-#   4. Positions in km (x = east, y = north of the colony) are converted to
-#      longitude and latitude with an azimuthal equidistant projection centred
-#      on the colony.
+#   4. Positions are on a plane in km, with the breeding site at (0, 0). For
+#      the workflow, they are converted to longitude and latitude with an
+#      azimuthal equidistant projection centred on an arbitrary reference
+#      point (see 01_simulate_tracks.R).
 # =============================================================================
 
 
@@ -54,13 +56,13 @@ legs_to_mu <- function(legs) {
   do.call(rbind, out)
 }
 
-# Breeding period at the colony, with or without foraging trips
+# Breeding period at the breeding site, with or without foraging trips
 breeding_legs <- function(n, label, trips, p) {
   if (!trips) return(list(list(type = 'stay', x = 0, y = 0, n = n,
                                stage = 'B', label = label)))
   legs <- list(); used <- 0
   while (used < n) {
-    # time at the colony before the next trip
+    # time at the breeding site before the next trip
     stay <- min(n - used, round(runif(1, p$trip_gap_days[1], p$trip_gap_days[2]) *
                                   p$positions_per_day))
     legs[[length(legs) + 1]] <- list(type = 'stay', x = 0, y = 0, n = max(1, stay),
@@ -223,9 +225,9 @@ ar1 <- function(n, sd, phi) {
 
 # Adds the error of one tracking method to the true positions (km)
 #   'none' : no error (e.g. GPS)
-#   'gls', 'gls_eq' : GLS-like error, larger in latitude, autocorrelated; around
-#            each equinox the latitude error is strongly inflated; random
-#            missing positions and short gaps
+#   'gls', 'gls_eq' : GLS-like error, larger in the north-south axis (y,
+#            latitude in GLS), autocorrelated; around each equinox the y error
+#            is strongly inflated; random missing positions and short gaps
 #   'ptt'  : Argos-like error (optional block)
 add_error <- function(true, error, p, seed) {
   set.seed(seed + 100000)
@@ -242,7 +244,7 @@ add_error <- function(true, error, p, seed) {
   e <- p$error$gls
   ex <- ar1(n, e$sd_lon_km, e$phi)
   ey <- ar1(n, e$sd_lat_km, e$phi)
-  # Equinoxes: latitude error inflated within +-eq_days of each equinox
+  # Equinoxes: y (latitude) error inflated within +-eq_days of each equinox
   doy_dist <- function(d, m, dd) {
     eq <- as.POSIXct(paste0(format(d, '%Y'), '-', m, '-', dd), tz = 'UTC')
     abs(as.numeric(difftime(d, eq, units = 'days')))
@@ -255,7 +257,7 @@ add_error <- function(true, error, p, seed) {
   obs$equinox_true <- near_eq
 
   # Missing data: random positions and short gaps (not in the first and last
-  # positions, which are fixed at the colony)
+  # positions, which are fixed at the breeding site)
   keep <- runif(n) > e$p_missing
   n_gaps <- rpois(1, e$gaps_per_track)
   for (g in seq_len(n_gaps)) {
@@ -272,8 +274,8 @@ add_error <- function(true, error, p, seed) {
 # 4. KM TO LONGITUDE / LATITUDE ----
 # =============================================================================
 
-km_to_lonlat <- function(x, y, col_lon, col_lat) {
-  aeqd <- paste0('+proj=aeqd +lat_0=', col_lat, ' +lon_0=', col_lon,
+km_to_lonlat <- function(x, y, ref_lon, ref_lat) {
+  aeqd <- paste0('+proj=aeqd +lat_0=', ref_lat, ' +lon_0=', ref_lon,
                  ' +x_0=0 +y_0=0 +units=km +datum=WGS84')
   pts <- sf::st_as_sf(data.frame(x = x, y = y), coords = c('x', 'y'), crs = aeqd)
   ll <- sf::st_coordinates(sf::st_transform(pts, 4326))
