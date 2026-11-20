@@ -64,7 +64,7 @@ p <- list(
   ref_lon = 0, ref_lat = 0,
 
   # Number of tracks per scenario
-  n_rep = 25,
+  n_rep = 50,
 
   # --- Movement --------------------------------------------------------------------
   # Distance from the breeding site to the (first) wintering area, by class (km)
