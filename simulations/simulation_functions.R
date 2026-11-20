@@ -98,35 +98,11 @@ simulate_track <- function(sc, p) {
   ppd <- p$positions_per_day
   day <- function(d) round(d * ppd)               # days -> steps
 
-  # --- Distances and directions -------------------------------------------------
-  dist_w <- runif(1, p$distance_km[[sc$distance]][1], p$distance_km[[sc$distance]][2])
-  bearing_w <- runif(1, p$bearing_deg[1], p$bearing_deg[2])
-  W1 <- move_point(0, 0, dist_w, bearing_w)
-  if (sc$movement == 'two_W') {
-    W2 <- move_point(W1[['x']], W1[['y']], runif(1, p$w2_km[1], p$w2_km[2]),
-                     runif(1, 0, 360))
-  } else W2 <- W1
-  speed_out <- runif(1, p$speed_km_day[1], p$speed_km_day[2])
-  speed_in  <- runif(1, p$speed_km_day[1], p$speed_km_day[2])
-
-  # Loop migration (as in the original simulations): the outward and return
-  # routes pass through two different waypoints. One waypoint is at a distance
-  # D/k (k = 2-4) from the breeding site and the other at D/k from the
-  # wintering area, 36-60 degrees to one side of the straight line. If both
-  # are on the same side the track has an 8-shape; if not, a round shape.
-  side <- function() sample(c(-1, 1), 1) * runif(1, p$waypoint_angle_deg[1],
-                                                p$waypoint_angle_deg[2])
-  P_B <- move_point(0, 0, dist_w / sample(p$waypoint_partition, 1), bearing_w + side())
-  P_W <- move_point(W2[['x']], W2[['y']], dist_w / sample(p$waypoint_partition, 1),
-                    bearing_w + 180 + side())
-  if (runif(1) < 0.5) { P_out <- P_B; P_in <- P_W } else { P_out <- P_W; P_in <- P_B }
-  if (sc$movement == 'two_W') P_out <- P_B   # P_W is near the second area
-  seg_len <- function(a, b) sqrt(sum((b - a)^2))
-  O <- c(x = 0, y = 0)
-
   # --- Dates (true phenology) -----------------------------------------------------
   # Migration away from the equinoxes ('none', 'gls') or overlapping them
-  # ('gls_eq'). Dates are drawn until the wintering stay is long enough.
+  # ('gls_eq'). Distances, routes, speeds and dates are drawn again until
+  # the wintering stay is long enough (long loop routes can be too long for
+  # the time between departure and arrival).
   timing <- if (sc$error == 'gls_eq') p$timing$equinox else p$timing$normal
   start <- as.POSIXct(p$start_date, tz = 'UTC')
   yr1 <- as.numeric(format(start, '%Y'))
@@ -134,7 +110,33 @@ simulate_track <- function(sc, p) {
     runif(1, 0, as.numeric(difftime(as.POSIXct(paste0(y, '-', r[2]), tz = 'UTC'),
                                     as.POSIXct(paste0(y, '-', r[1]), tz = 'UTC'),
                                     units = 'secs')))
-  for (k in 1:50) {
+  for (k in 1:200) {
+    # --- Distances and directions -------------------------------------------------
+    dist_w <- runif(1, p$distance_km[[sc$distance]][1], p$distance_km[[sc$distance]][2])
+    bearing_w <- runif(1, p$bearing_deg[1], p$bearing_deg[2])
+    W1 <- move_point(0, 0, dist_w, bearing_w)
+    if (sc$movement == 'two_W') {
+      W2 <- move_point(W1[['x']], W1[['y']], runif(1, p$w2_km[1], p$w2_km[2]),
+                       runif(1, 0, 360))
+    } else W2 <- W1
+    speed_out <- runif(1, p$speed_km_day[1], p$speed_km_day[2])
+    speed_in  <- runif(1, p$speed_km_day[1], p$speed_km_day[2])
+
+    # Loop migration (as in the original simulations): the outward and return
+    # routes pass through two different waypoints. One waypoint is at a distance
+    # D/k (k = 2-4) from the breeding site and the other at D/k from the
+    # wintering area, 36-60 degrees to one side of the straight line. If both
+    # are on the same side the track has an 8-shape; if not, a round shape.
+    side <- function() sample(c(-1, 1), 1) * runif(1, p$waypoint_angle_deg[1],
+                                                  p$waypoint_angle_deg[2])
+    P_B <- move_point(0, 0, dist_w / sample(p$waypoint_partition, 1), bearing_w + side())
+    P_W <- move_point(W2[['x']], W2[['y']], dist_w / sample(p$waypoint_partition, 1),
+                      bearing_w + 180 + side())
+    if (runif(1) < 0.5) { P_out <- P_B; P_in <- P_W } else { P_out <- P_W; P_in <- P_B }
+    if (sc$movement == 'two_W') P_out <- P_B   # P_W is near the second area
+    seg_len <- function(a, b) sqrt(sum((b - a)^2))
+    O <- c(x = 0, y = 0)
+
     dep <- rdate(timing$B1_dep, yr1)
     arr <- rdate(timing$B2_arr, yr1 + 1)
     # outward route: breeding site -> waypoint (stopover) -> wintering area
