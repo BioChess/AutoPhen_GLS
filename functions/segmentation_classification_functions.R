@@ -329,6 +329,25 @@ R2n_limit <- function(x = track, plot = F, Kmax = 3, lmin = 5, ncluster = 3){
     if (!is.na(out)) break
   }
 
+  # If segclust2d still fails (no clustering solution, e.g. in some short
+  # tracks), the three segments are taken from the segmentation alone
+  # (Lavielle algorithm, without clustering)
+  if (is.na(out)) {
+    out <- tryCatch({
+      suppressWarnings({
+        x_lav <- segmentation(x, Kmax = Kmax, lmin = 5, seg.var = c('R2n'),
+                              subsample = F)
+        x_seg <- segment(x_lav, nseg = 3)
+        mean(c(x$R2n[x_seg$begin[2]], x$R2n[x_seg$begin[3]]), na.rm = T)
+      })
+    }, error = function(e) {
+      message("An error occurred in the segmentation without clustering: ",
+              e$message)
+      return(NA)
+    })
+  }
+  if (is.na(out)) stop('The distance limit (NSCD) could not be calculated')
+
   if (plot && !is.null(x_segclust)) {
     plot(x_segclust)
   }
