@@ -23,8 +23,10 @@
 #                         autocorrelated, north-south error inflated around
 #                         the equinoxes, missing positions); migrations away
 #                         from the equinoxes
-#               gls_eq    the same error, with migrations overlapping the
-#                         equinoxes
+#               gls_eq    the same error, with one migration overlapping one
+#                         equinox (outward in September or return in March)
+#   The wintering stay has the same duration range (50-100 days) in all
+#   scenarios, so they only differ in the observation error and in the timing.
 #
 #   Coordinates for the workflow: the workflow needs longitude and latitude.
 #   The plane (km) is placed on an arbitrary reference point (ref_lon,
@@ -80,7 +82,7 @@ p <- list(
                                       # the centre (marcher A = pi * r^2)
   tau_z_days = c(2.5, 3.5),           # position autocorrelation (marcher tau.z)
   tau_v_days = c(0.02, 0.03),         # velocity autocorrelation (marcher tau.v)
-  min_wintering_days = 30,            # minimum stay in each wintering area
+  wintering_days = c(50, 100),        # total wintering stay (all scenarios)
   after_arrival_days = c(15, 45),     # breeding period after the return
   # foraging trips (movement 'foraging')
   trip_gap_days = c(1, 15),           # time at the breeding site between trips
@@ -91,11 +93,14 @@ p <- list(
   # second wintering area (movement 'two_W')
   w2_km = c(500, 1500),               # distance between the two wintering areas
 
-  # --- Timing (month-day ranges) ----------------------------------------------------
-  # normal:  migrations away from the equinoxes (+-20 days)
-  # equinox: outward and return migrations overlap the equinoxes
-  timing = list(normal  = list(B1_dep = c('10-20', '11-15'), B2_arr = c('02-05', '02-25')),
-                equinox = list(B1_dep = c('09-10', '10-02'), B2_arr = c('03-08', '03-28'))),
+  # --- Timing (month-day) ------------------------------------------------------------
+  # Away from the equinoxes ('none', 'gls'): departure in October and the
+  # return finished before the March equinox window (+-15 days of 20 March).
+  # At an equinox ('gls_eq'): the outward migration starts at the September
+  # equinox, or the return migration ends at the March equinox.
+  timing = list(departure = c('10-08', '10-31'), latest_arrival = '03-04',
+                september_departure = c('09-12', '09-28'),
+                march_arrival = c('03-10', '03-28'), earliest_departure = '10-08'),
 
   # --- Observation error ----------------------------------------------------------
   error = list(

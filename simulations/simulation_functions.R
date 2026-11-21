@@ -99,11 +99,18 @@ simulate_track <- function(sc, p) {
   day <- function(d) round(d * ppd)               # days -> steps
 
   # --- Dates (true phenology) -----------------------------------------------------
-  # Migration away from the equinoxes ('none', 'gls') or overlapping them
-  # ('gls_eq'). Distances, routes, speeds and dates are drawn again until
-  # the wintering stay is long enough (long loop routes can be too long for
-  # the time between departure and arrival).
-  timing <- if (sc$error == 'gls_eq') p$timing$equinox else p$timing$normal
+  # The wintering stay has the same duration range in all scenarios, so the
+  # scenarios only differ in the timing of the migrations:
+  #   'none', 'gls': both migrations away from the equinoxes (departure in
+  #             October; the return must end before the March equinox window)
+  #   'gls_eq': one migration overlaps one equinox (chosen at random): the
+  #             outward migration starts at the September equinox, or the
+  #             return migration ends at the March equinox (and then the
+  #             outward migration is after the September equinox window)
+  # Distances, routes, speeds and durations are drawn again until the dates
+  # fit (long loop routes can be too long).
+  tm <- p$timing
+  eq_overlap <- if (sc$error == 'gls_eq') sample(c('september', 'march'), 1) else 'none'
   start <- as.POSIXct(p$start_date, tz = 'UTC')
   yr1 <- as.numeric(format(start, '%Y'))
   rdate <- function(r, y) as.POSIXct(paste0(y, '-', r[1]), tz = 'UTC') +
@@ -137,8 +144,6 @@ simulate_track <- function(sc, p) {
     seg_len <- function(a, b) sqrt(sum((b - a)^2))
     O <- c(x = 0, y = 0)
 
-    dep <- rdate(timing$B1_dep, yr1)
-    arr <- rdate(timing$B2_arr, yr1 + 1)
     # outward route: breeding site -> waypoint (stopover) -> wintering area
     n_out1 <- max(1, day(seg_len(O, P_out) / speed_out))
     n_out2 <- max(1, day(seg_len(P_out, W1) / speed_out))
@@ -152,13 +157,24 @@ simulate_track <- function(sc, p) {
     n_w2move <- if (sc$movement == 'two_W') {
       day(sqrt(sum((W2 - W1)^2)) / speed_out)
     } else 0
-    t_dep <- round(as.numeric(difftime(dep, start, units = 'days')) * ppd)
-    t_arr <- round(as.numeric(difftime(arr, start, units = 'days')) * ppd)
-    n_w <- t_arr - n_in - (t_dep + n_out + n_stop) - n_w2move
-    min_w <- day(p$min_wintering_days) * ifelse(sc$movement == 'two_W', 2, 1)
-    if (n_w >= min_w) break
+    n_w   <- day(runif(1, p$wintering_days[1], p$wintering_days[2]))
+    total <- n_out + n_stop + n_w + n_w2move + n_in
+    step_of <- function(d) round(as.numeric(difftime(d, start, units = 'days')) * ppd)
+    if (eq_overlap == 'march') {
+      t_arr <- step_of(rdate(tm$march_arrival, yr1 + 1))
+      t_dep <- t_arr - total
+    } else {
+      dep_range <- if (eq_overlap == 'september') tm$september_departure else tm$departure
+      t_dep <- step_of(rdate(dep_range, yr1))
+      t_arr <- t_dep + total
+    }
+    ok <- switch(eq_overlap,
+      none      = t_arr <= step_of(as.POSIXct(paste0(yr1 + 1, '-', tm$latest_arrival), tz = 'UTC')),
+      september = TRUE,
+      march     = t_dep >= step_of(as.POSIXct(paste0(yr1, '-', tm$earliest_departure), tz = 'UTC')))
+    if (ok) break
   }
-  if (n_w < min_w) stop('Wintering stay too short for scenario ', sc$sim_id)
+  if (!ok) stop('The migrations do not fit the timing of scenario ', sc$sim_id)
   n_end <- day(runif(1, p$after_arrival_days[1], p$after_arrival_days[2]))
   trips <- sc$movement == 'foraging'
 
@@ -213,7 +229,7 @@ simulate_track <- function(sc, p) {
   first_B2  <- min(which(true$leg == 'B2'))
   dates <- data.frame(
     sim_id = sc$sim_id, distance = sc$distance, movement = sc$movement,
-    error = sc$error, seed = sc$seed,
+    error = sc$error, seed = sc$seed, equinox_overlap = eq_overlap,
     dist_km = round(dist_w), bearing = round(bearing_w),
     speed_out = round(speed_out), speed_in = round(speed_in),
     range_radius_km = round(sqrt(A / pi)), tau_z_days = round(tau[['tau.z']] / ppd, 2),
