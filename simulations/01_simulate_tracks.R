@@ -21,12 +21,13 @@
 #     error     none      no observation error (e.g. GPS)
 #               gls       GLS-like error (larger in the north-south axis,
 #                         autocorrelated, north-south error inflated around
-#                         the equinoxes, missing positions); migrations away
-#                         from the equinoxes
-#               gls_eq    the same error, with one migration overlapping one
-#                         equinox (outward in September or return in March)
-#   The wintering stay has the same duration range (50-100 days) in all
-#   scenarios, so they only differ in the observation error and in the timing.
+#                         the equinoxes, missing positions); both equinoxes
+#                         during the wintering period
+#               gls_eq    the same error, with one migration at an equinox
+#                         (outward in September or return in March)
+#   All stages have the same duration ranges in all scenarios, and no
+#   equinox falls in the breeding periods, so 'gls' and 'gls_eq' only differ
+#   in whether an equinox overlaps a migration or the wintering period.
 #
 #   Coordinates for the workflow: the workflow needs longitude and latitude.
 #   The plane (km) is placed on an arbitrary reference point (ref_lon,
@@ -61,7 +62,7 @@ dir.create(file.path(out_dir, 'checks'), recursive = TRUE, showWarnings = FALSE)
 
 p <- list(
   positions_per_day = 2,
-  start_date = '2021-07-01',          # first position (breeding period)
+  start_date = '2021-05-01',          # first position (breeding period)
   # Reference point to convert km to longitude/latitude (arbitrary; see above)
   ref_lon = 0, ref_lat = 0,
 
@@ -82,7 +83,8 @@ p <- list(
                                       # the centre (marcher A = pi * r^2)
   tau_z_days = c(2.5, 3.5),           # position autocorrelation (marcher tau.z)
   tau_v_days = c(0.02, 0.03),         # velocity autocorrelation (marcher tau.v)
-  wintering_days = c(50, 100),        # total wintering stay (all scenarios)
+  wintering_days = c(200, 230),       # wintering period (all scenarios); it
+                                      # includes both equinoxes in 'none'/'gls'
   after_arrival_days = c(15, 45),     # breeding period after the return
   # foraging trips (movement 'foraging')
   trip_gap_days = c(1, 15),           # time at the breeding site between trips
@@ -96,13 +98,16 @@ p <- list(
   w2_km = c(500, 1500),               # distance between the two wintering areas
 
   # --- Timing (month-day) ------------------------------------------------------------
-  # Away from the equinoxes ('none', 'gls'): departure in October and the
-  # return finished before the March equinox window (+-15 days of 20 March).
-  # At an equinox ('gls_eq'): the outward migration starts at the September
-  # equinox, or the return migration ends at the March equinox.
-  timing = list(departure = c('10-08', '10-31'), latest_arrival = '03-04',
-                september_departure = c('09-12', '09-28'),
-                march_arrival = c('03-10', '03-28'), earliest_departure = '10-08'),
+  # 'none'/'gls': arrival at the wintering area before the September equinox
+  #   window, so both equinoxes are in the wintering period.
+  # 'gls_eq': outward migration centred on the September equinox, or return
+  #   migration centred on the March equinox.
+  # No equinox falls in the breeding periods (at least min_breeding_days of
+  # breeding before the departure).
+  timing = list(wintering_arrival = c('08-15', '09-04'),
+                september_centre = c('09-17', '09-27'),
+                march_centre = c('03-15', '03-25'),
+                min_breeding_days = 30),
 
   # --- Observation error ----------------------------------------------------------
   error = list(

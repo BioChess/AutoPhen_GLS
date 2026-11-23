@@ -99,16 +99,18 @@ simulate_track <- function(sc, p) {
   day <- function(d) round(d * ppd)               # days -> steps
 
   # --- Dates (true phenology) -----------------------------------------------------
-  # The wintering stay has the same duration range in all scenarios, so the
-  # scenarios only differ in the timing of the migrations:
-  #   'none', 'gls': both migrations away from the equinoxes (departure in
-  #             October; the return must end before the March equinox window)
-  #   'gls_eq': one migration overlaps one equinox (chosen at random): the
-  #             outward migration starts at the September equinox, or the
-  #             return migration ends at the March equinox (and then the
-  #             outward migration is after the September equinox window)
+  # Every track has the two equinoxes (+-eq_days around 22 September and 20
+  # March). The scenarios only differ in WHERE the equinoxes fall, with the
+  # same duration ranges of all stages:
+  #   'none', 'gls': both equinoxes during the wintering period (no
+  #             migration overlaps an equinox)
+  #   'gls_eq': one equinox (chosen at random) at a migration: the outward
+  #             migration is centred on the September equinox, or the return
+  #             migration is centred on the March equinox (the rest of that
+  #             equinox window falls in the stages before and after the
+  #             migration); the other equinox is during the wintering period
   # Distances, routes, speeds and durations are drawn again until the dates
-  # fit (long loop routes can be too long).
+  # fit.
   tm <- p$timing
   eq_overlap <- if (sc$error == 'gls_eq') sample(c('september', 'march'), 1) else 'none'
   start <- as.POSIXct(p$start_date, tz = 'UTC')
@@ -158,20 +160,41 @@ simulate_track <- function(sc, p) {
       day(sqrt(sum((W2 - W1)^2)) / speed_out)
     } else 0
     n_w   <- day(runif(1, p$wintering_days[1], p$wintering_days[2]))
-    total <- n_out + n_stop + n_w + n_w2move + n_in
+    n_out_all <- n_out + n_stop                 # outward migration (+ stopover)
+    n_w_all   <- n_w + n_w2move                 # wintering period (+ move W1-W2)
     step_of <- function(d) round(as.numeric(difftime(d, start, units = 'days')) * ppd)
-    if (eq_overlap == 'march') {
-      t_arr <- step_of(rdate(tm$march_arrival, yr1 + 1))
-      t_dep <- t_arr - total
-    } else {
-      dep_range <- if (eq_overlap == 'september') tm$september_departure else tm$departure
-      t_dep <- step_of(rdate(dep_range, yr1))
-      t_arr <- t_dep + total
+    eq_win <- function(md, y) {
+      e <- step_of(as.POSIXct(paste0(y, '-', md), tz = 'UTC'))
+      c(e - day(p$error$gls$eq_days), e + day(p$error$gls$eq_days))
     }
-    ok <- switch(eq_overlap,
-      none      = t_arr <= step_of(as.POSIXct(paste0(yr1 + 1, '-', tm$latest_arrival), tz = 'UTC')),
-      september = TRUE,
-      march     = t_dep >= step_of(as.POSIXct(paste0(yr1, '-', tm$earliest_departure), tz = 'UTC')))
+    sep_win <- eq_win('09-22', yr1); mar_win <- eq_win('03-20', yr1 + 1)
+    overlaps <- function(a, b, w) a <= w[2] && b >= w[1]
+    if (eq_overlap == 'march') {
+      # return migration centred on the March equinox
+      mid    <- step_of(rdate(tm$march_centre, yr1 + 1))
+      t_wdep <- mid - round(n_in / 2)
+      t_warr <- t_wdep - n_w_all
+      t_dep  <- t_warr - n_out_all
+    } else if (eq_overlap == 'september') {
+      # outward migration centred on the September equinox
+      mid    <- step_of(rdate(tm$september_centre, yr1))
+      t_dep  <- mid - round(n_out_all / 2)
+      t_warr <- t_dep + n_out_all
+      t_wdep <- t_warr + n_w_all
+    } else {
+      # arrival at the wintering area before the September equinox window
+      t_warr <- step_of(rdate(tm$wintering_arrival, yr1))
+      t_dep  <- t_warr - n_out_all
+      t_wdep <- t_warr + n_w_all
+    }
+    t_arr <- t_wdep + n_in
+    out_eq  <- overlaps(t_dep, t_warr, sep_win)
+    back_eq <- overlaps(t_wdep, t_arr, mar_win)
+    ok <- t_dep >= day(tm$min_breeding_days) &&
+      switch(eq_overlap,
+             none      = t_warr < sep_win[1] && t_wdep > mar_win[2],
+             september = out_eq && t_wdep > mar_win[2],
+             march     = t_warr < sep_win[1] && back_eq)
     if (ok) break
   }
   if (!ok) stop('The migrations do not fit the timing of scenario ', sc$sim_id)
