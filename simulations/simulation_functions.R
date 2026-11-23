@@ -180,11 +180,14 @@ simulate_track <- function(sc, p) {
 
   # --- Legs of the centre of attraction -------------------------------------------
   legs <- breeding_legs(t_dep, 'B1', trips, p)
-  # outward migration; the stopover (if any) is at the waypoint
+  # outward migration; the stopover (if any) is at the waypoint. A stopover
+  # is a short stationary stage outside the breeding site: for the workflow
+  # it is a (short) wintering stage, W1, and the main wintering area is W2.
+  # Calling it stopover or wintering only depends on its duration.
   legs <- c(legs, list(
     list(type = 'move', x = P_out[['x']], y = P_out[['y']], n = n_out1, stage = 'mig', label = 'mig1')),
     if (n_stop > 0) list(list(type = 'stay', x = P_out[['x']], y = P_out[['y']],
-                              n = n_stop, stage = 'mig', label = 'stopover')),
+                              n = n_stop, stage = 'W', label = 'stopover')),
     list(list(type = 'move', x = W1[['x']], y = W1[['y']], n = n_out2, stage = 'mig',
               label = 'mig1')))
   if (sc$movement == 'two_W') {
@@ -323,7 +326,7 @@ km_to_lonlat <- function(x, y, ref_lon, ref_lat) {
 class_labels    <- c(B = 'Breeding', mig = 'Migration', W = 'Wintering')
 class_colours   <- c(Breeding = 'orange2', Migration = 'grey55', Wintering = 'steelblue')
 movement_labels <- c(base = 'Base', foraging = 'Foraging trips',
-                     stopover = 'Stopover', two_W = 'Two wintering areas')
+                     stopover = 'Stopover (5-15 days)', two_W = 'Two wintering areas')
 error_labels    <- c(none = 'No error (GPS-like)', gls = 'GLS-like error',
                      gls_eq = 'GLS-like error,\nmigration at equinoxes')
 distance_labels <- c(short = 'Short (800-2000 km)', medium = 'Medium (3000-5000 km)',

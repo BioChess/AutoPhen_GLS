@@ -88,7 +88,9 @@ p <- list(
   trip_gap_days = c(1, 15),           # time at the breeding site between trips
   trip_days = c(4, 20),               # duration of a trip
   trip_km = c(150, 1000),             # maximum distance from the breeding site
-  # stopover (movement 'stopover'): at the waypoint of the outward route
+  # stopover (movement 'stopover'): short stationary stage at the waypoint of
+  # the outward route; true class W (a short wintering stage, see
+  # simulation_functions.R)
   stopover_days = c(5, 15),
   # second wintering area (movement 'two_W')
   w2_km = c(500, 1500),               # distance between the two wintering areas

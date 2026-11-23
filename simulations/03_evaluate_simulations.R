@@ -5,8 +5,8 @@
 # Description: Compares the automated output of the workflow with the truth of
 #              the simulations.
 #   Per track:   class agreement (proportion of positions with the true class:
-#                breeding, migration or wintering; positions of a stopover are
-#                correct as migration or as wintering),
+#                breeding, migration or wintering; a stopover is a short
+#                wintering stage, so its true class is wintering),
 #                signed error of each date (days; estimated - true; negative =
 #                too early), failed tracks.
 #   Per scenario (distance x movement x error) and date: number of dates,
@@ -55,15 +55,13 @@ lev <- function(d) d %>% mutate(
 # =============================================================================
 
 pt <- read_group('Phenology_tracks.csv') %>% transmute(ID, date, est = three_classes(Breed2))
-# A stopover classified as wintering is accepted: it is a short stationary
-# period, and what matters is that the real wintering area is also detected
-# (this is checked with the dates below)
 cls <- inner_join(truth_pos, pt, by = c('ID', 'date')) %>%
-  mutate(correct = true == est | (leg == 'stopover' & est == 'W')) %>%
   group_by(ID) %>%
-  summarise(class_agreement = mean(correct), n_positions = n(),
-            # stopover detected as a wintering stage (most of its positions W)
-            stopover_as_W = if (any(leg == 'stopover')) mean(est[leg == 'stopover'] == 'W') > 0.5 else NA,
+  summarise(class_agreement = mean(true == est), n_positions = n(),
+            # stopover detected (most of its positions classified as W) and
+            # its duration (days)
+            stopover_detected = if (any(leg == 'stopover')) mean(est[leg == 'stopover'] == 'W') > 0.5 else NA,
+            stopover_days = sum(leg == 'stopover') / 2,
             .groups = 'drop')
 
 
@@ -75,22 +73,6 @@ ph  <- read_group('Phenology.csv')
 est <- main_dates(ph, suffix = '_KDE')
 tru <- truth_dates %>% transmute(ID, B1_dep, W_arr, W_dep, B2_arr)
 
-# Arrival at the wintering area: the first estimated wintering stage that
-# overlaps the true wintering period. A stopover detected as an earlier
-# wintering stage is then not taken as the arrival (it is only an error if
-# the real wintering area is not detected).
-w_stages <- ph %>%
-  select(ID, matches('^W[0-9]+_(arr|dep)_KDE$')) %>%
-  pivot_longer(-ID, names_to = c('stage', '.value'),
-               names_pattern = '^(W[0-9]+)_(arr|dep)_KDE$') %>%
-  mutate(arr = as.Date(arr), dep = as.Date(dep)) %>%
-  filter(!is.na(arr))
-w_arr_overlap <- w_stages %>%
-  inner_join(tru %>% select(ID, W_arr_t = W_arr, W_dep_t = W_dep), by = 'ID') %>%
-  filter(arr <= W_dep_t, is.na(dep) | dep >= W_arr_t) %>%
-  group_by(ID) %>% summarise(W_arr_ov = min(arr), .groups = 'drop')
-est <- est %>% left_join(w_arr_overlap, by = 'ID') %>%
-  mutate(W_arr = coalesce(W_arr_ov, W_arr)) %>% select(-W_arr_ov)
 dts <- inner_join(tru, est, by = 'ID', suffix = c('_true', '_est'))
 err <- map_dfr(date_names, function(n) {
   tibble(ID = dts$ID, date = n,
@@ -143,10 +125,14 @@ tab_dates_error <- err_s %>% group_by(error, date) %>% summ_dates()
 write_csv(err_s %>% filter(error != 'none') %>%
             group_by(error, equinox_overlap, date) %>% summ_dates(),
           file.path(res_dir, 'sim_dates_by_equinox.csv'))
-# Stopovers detected as wintering stages
+# Detection of short stationary stages (stopovers, 5-15 days) by duration:
+# a limitation of the segmentation for short stages
 write_csv(per_track %>% filter(movement == 'stopover') %>%
-            group_by(error, distance) %>%
-            summarise(n_tracks = n(), stopover_as_W_pct = round(100 * mean(stopover_as_W, na.rm = TRUE), 1),
+            mutate(stopover_duration = cut(stopover_days, c(0, 7.5, 10, 12.5, 16),
+                                           labels = c('5-7.5', '7.5-10', '10-12.5', '12.5-15'))) %>%
+            group_by(error, stopover_duration) %>%
+            summarise(n_tracks = n(),
+                      detected_pct = round(100 * mean(stopover_detected, na.rm = TRUE), 1),
                       W_arr_within3_pct = round(100 * mean(abs(err_W_arr) <= 3, na.rm = TRUE), 1),
                       .groups = 'drop'),
           file.path(res_dir, 'sim_stopovers.csv'))
@@ -185,9 +171,7 @@ seg_true <- seg %>%
   mutate(seg_n = row_number()) %>%
   inner_join(pos, by = join_by(ID, begin <= row, end >= row)) %>%
   group_by(seg_n, ID, Breed, Agreement, Check, Check_reason) %>%
-  summarise(prop_correct = mean(three_classes(Breed) == true |
-                                (leg == 'stopover' & three_classes(Breed) == 'W')),
-            .groups = 'drop') %>%
+  summarise(prop_correct = mean(three_classes(Breed) == true), .groups = 'drop') %>%
   mutate(wrong = prop_correct < 0.5) %>%
   left_join(scen, by = 'ID') %>% lev()
 write_csv(seg_true, file.path(res_dir, 'sim_segments.csv'))
