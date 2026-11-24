@@ -6,7 +6,9 @@
 #              the simulations.
 #   Per track:   class agreement (proportion of positions with the true class:
 #                breeding, migration or wintering; a stopover is a short
-#                wintering stage, so its true class is wintering),
+#                wintering stage, so its true class is wintering; as in the
+#                workflow, a movement between two wintering stages is part of
+#                the wintering period),
 #                signed error of each date (days; estimated - true; negative =
 #                too early), failed tracks.
 #   Per scenario (distance x movement x error) and date: number of dates,
@@ -35,6 +37,22 @@ truth_dates <- read_csv(file.path(sim_dir, 'sim_truth_dates.csv'), show_col_type
 truth_pos   <- read_csv(file.path(sim_dir, 'sim_truth_positions.csv'), show_col_types = FALSE,
                         col_types = cols(geo_trip = 'c')) %>%
   transmute(ID = geo_trip, date = Date_Time, true = stage, leg)
+
+# The workflow joins W-mig-W into one wintering stage: a movement between two
+# stationary non-breeding stages (two wintering areas, or a stopover and the
+# wintering area) is part of the wintering period. The truth uses the same
+# definition: these movement positions are wintering (W).
+truth_pos <- truth_pos %>%
+  arrange(ID, date) %>%
+  group_by(ID) %>%
+  mutate(prev_stage = if_else(true == 'mig', NA_character_, true),
+         next_stage = prev_stage) %>%
+  fill(prev_stage, .direction = 'down') %>%
+  fill(next_stage, .direction = 'up') %>%
+  mutate(true = if_else(true == 'mig' & prev_stage %in% 'W' & next_stage %in% 'W',
+                        'W', true)) %>%
+  ungroup() %>%
+  select(-prev_stage, -next_stage)
 
 groups <- c('gls', 'none')
 groups <- groups[file.exists(file.path(out_dir, groups, 'Phenology.csv'))]
