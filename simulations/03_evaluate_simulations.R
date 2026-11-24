@@ -41,8 +41,11 @@ truth_pos   <- read_csv(file.path(sim_dir, 'sim_truth_positions.csv'), show_col_
 # The workflow joins W-mig-W into one wintering stage: a movement between two
 # stationary non-breeding stages (two wintering areas, or a stopover and the
 # wintering area) is part of the wintering period. The truth uses the same
-# definition: these movement positions are wintering (W).
+# definition: these movement positions are wintering (W). The original stage
+# is kept in 'true_seg' for the evaluation of the segments (section 4), because
+# the segments are classified before W-mig-W is joined.
 truth_pos <- truth_pos %>%
+  mutate(true_seg = true) %>%
   arrange(ID, date) %>%
   group_by(ID) %>%
   mutate(prev_stage = if_else(true == 'mig', NA_character_, true),
@@ -175,7 +178,9 @@ print(per_track %>% group_by(error) %>%
 # 4. AGREEMENT SCORE AND SEGMENTS FLAGGED FOR REVIEW ----
 # =============================================================================
 # For each segment: proportion of its positions with the true class. A segment
-# is 'wrong' if most of its positions are misclassified.
+# is 'wrong' if most of its positions are misclassified. The segments are
+# classified before W-mig-W is joined, so here the true class of a movement
+# between two wintering stages is migration (true_seg).
 
 seg <- read_group('Segmentation_results.csv')
 # Positions of each segment: rows begin to end of the track (same rows as
@@ -189,7 +194,7 @@ seg_true <- seg %>%
   mutate(seg_n = row_number()) %>%
   inner_join(pos, by = join_by(ID, begin <= row, end >= row)) %>%
   group_by(seg_n, ID, Breed, Agreement, Check, Check_reason) %>%
-  summarise(prop_correct = mean(three_classes(Breed) == true), .groups = 'drop') %>%
+  summarise(prop_correct = mean(three_classes(Breed) == true_seg), .groups = 'drop') %>%
   mutate(wrong = prop_correct < 0.5) %>%
   left_join(scen, by = 'ID') %>% lev()
 write_csv(seg_true, file.path(res_dir, 'sim_segments.csv'))
