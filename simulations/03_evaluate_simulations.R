@@ -6,15 +6,21 @@
 #              the simulations.
 #   Per track:   class agreement (proportion of positions with the true class:
 #                breeding, migration or wintering; a stopover is a short
-#                wintering stage, so its true class is wintering; as in the
-#                workflow, a movement between two wintering stages is part of
-#                the wintering period),
+#                wintering stage, so its true class is wintering; the movement
+#                between two wintering stages is migration, as in the
+#                workflow),
 #                signed error of each date (days; estimated - true; negative =
 #                too early), failed tracks.
 #   Per scenario (distance x movement x error) and date: number of dates,
 #                bias (median signed error), median and mean absolute error,
 #                90th percentile and maximum absolute error, percentage within
-#                1, 3 and 7 days, missing dates.
+#                1, 3 and 7 days, missing dates. The wintering dates are those
+#                of the total wintering period (arrival at the first wintering
+#                area, departure from the last one).
+#   Each wintering area (WA: stopover, W1, W2): % detected, errors of its
+#                arrival and departure dates, and % of tracks with the true
+#                number of WAs (sim_wintering_areas.csv). The main WA (the
+#                longest true WA) errors are also in sim_per_track.csv.
 #   Per segment: agreement score vs proportion of positions correctly
 #                classified (does the agreement score predict errors?).
 #
@@ -38,24 +44,8 @@ truth_pos   <- read_csv(file.path(sim_dir, 'sim_truth_positions.csv'), show_col_
                         col_types = cols(geo_trip = 'c')) %>%
   transmute(ID = geo_trip, date = Date_Time, true = stage, leg)
 
-# The workflow joins W-mig-W into one wintering stage: a movement between two
-# stationary non-breeding stages (two wintering areas, or a stopover and the
-# wintering area) is part of the wintering period. The truth uses the same
-# definition: these movement positions are wintering (W). The original stage
-# is kept in 'true_seg' for the evaluation of the segments (section 4), because
-# the segments are classified before W-mig-W is joined.
-truth_pos <- truth_pos %>%
-  mutate(true_seg = true) %>%
-  arrange(ID, date) %>%
-  group_by(ID) %>%
-  mutate(prev_stage = if_else(true == 'mig', NA_character_, true),
-         next_stage = prev_stage) %>%
-  fill(prev_stage, .direction = 'down') %>%
-  fill(next_stage, .direction = 'up') %>%
-  mutate(true = if_else(true == 'mig' & prev_stage %in% 'W' & next_stage %in% 'W',
-                        'W', true)) %>%
-  ungroup() %>%
-  select(-prev_stage, -next_stage)
+# The segments are evaluated with the same true stage (true_seg = true).
+truth_pos <- truth_pos %>% mutate(true_seg = true)
 
 groups <- c('gls', 'none')
 groups <- groups[file.exists(file.path(out_dir, groups, 'Phenology.csv'))]
@@ -100,6 +90,52 @@ err <- map_dfr(date_names, function(n) {
          diff = as.numeric(dts[[paste0(n, '_est')]] - dts[[paste0(n, '_true')]]))
 })
 
+# Each wintering area (WA). True WAs: runs of true wintering positions (the
+# stopover, W1 and W2). Estimated WAs: wintering stages of the workflow
+# (W1, W2, ... after the short-stage rule, as in step 03), with their KDE
+# dates. Each true WA is matched with the estimated WA that shares most of
+# its positions; 'detected' = a matched WA exists. The main WA is the longest
+# true WA.
+lmin <- readRDS(file.path(out_dir, groups[1], 'parameters.rds'))$lmin
+check_phen_env <- new.env()
+sys.source(file.path('functions', 'phenology_dates_functions.R'), envir = check_phen_env)
+wa_runs <- function(d, col) {
+  d %>% arrange(ID, date) %>% group_by(ID) %>%
+    mutate(run = cumsum(.data[[col]] != lag(.data[[col]], default = first(.data[[col]])))) %>%
+    filter(.data[[col]] == 'W') %>%
+    mutate(k = dense_rank(run)) %>% ungroup() %>% select(ID, date, k)
+}
+true_wa <- truth_pos %>% wa_runs('true') %>% rename(k_true = k)
+true_wa_dates <- truth_pos %>% arrange(ID, date) %>% group_by(ID) %>%
+  mutate(next_date = lead(date)) %>% ungroup() %>%
+  inner_join(true_wa, by = c('ID', 'date')) %>%
+  group_by(ID, k_true) %>%
+  summarise(arr_true = as.Date(min(date)),
+            dep_true = as.Date(max(next_date, na.rm = TRUE)),
+            days = as.numeric(difftime(max(date), min(date), units = 'days')),
+            .groups = 'drop_last') %>%
+  mutate(n_WA_true = n(), main = days == max(days)) %>% ungroup()
+est_stage <- read_group('Phenology_tracks.csv') %>% select(ID, date, Breed2) %>%
+  mutate(Breed2 = three_classes(Breed2)) %>% group_by(ID) %>% arrange(date, .by_group = TRUE) %>%
+  group_modify(~ check_phen_env$check_phen(.x, 'Breed2', min_length = lmin)) %>% ungroup()
+est_wa <- est_stage %>% wa_runs('Breed2') %>% rename(k_est = k)
+match <- inner_join(true_wa, est_wa, by = c('ID', 'date')) %>%
+  count(ID, k_true, k_est) %>% group_by(ID, k_true) %>% slice_max(n, n = 1, with_ties = FALSE) %>%
+  ungroup() %>% select(ID, k_true, k_est)
+est_wa_dates <- ph %>% select(ID, matches('^W[0-9]+_(arr|dep)_KDE$')) %>%
+  pivot_longer(-ID, names_to = c('k_est', 'what'), names_pattern = 'W([0-9]+)_(arr|dep)_KDE',
+               values_to = 'value') %>%
+  mutate(k_est = as.integer(k_est), value = as.Date(value)) %>%
+  pivot_wider(names_from = what, values_from = value)
+n_wa_est <- est_wa %>% distinct(ID, k_est) %>% count(ID, name = 'n_WA_est')
+wa_eval <- true_wa_dates %>% left_join(match, by = c('ID', 'k_true')) %>%
+  left_join(est_wa_dates, by = c('ID', 'k_est')) %>%
+  left_join(n_wa_est, by = 'ID') %>%
+  mutate(n_WA_est = replace_na(n_WA_est, 0L), detected = !is.na(k_est),
+         err_arr = as.numeric(arr - arr_true), err_dep = as.numeric(dep - dep_true))
+main_wa <- wa_eval %>% filter(main) %>% group_by(ID) %>% slice(1) %>% ungroup() %>%
+  transmute(ID, n_WA_true, n_WA_est, err_WA_main_arr = err_arr, err_WA_main_dep = err_dep)
+
 # Failed tracks (any step)
 failed <- map_dfr(groups, function(g) {
   f <- file.path(out_dir, g, 'Failed_tracks.csv')
@@ -118,6 +154,7 @@ per_track <- scen %>%
   left_join(cls, by = 'ID') %>%
   left_join(err %>% pivot_wider(names_from = date, values_from = diff,
                                 names_prefix = 'err_'), by = 'ID') %>%
+  left_join(main_wa, by = 'ID') %>%
   mutate(failed = ID %in% failed$ID) %>% lev()
 write_csv(per_track, file.path(res_dir, 'sim_per_track.csv'))
 
@@ -133,6 +170,33 @@ summ_dates <- function(d) d %>% summarise(
   within3_pct  = round(100 * mean(abs(diff) <= 3, na.rm = TRUE), 1),
   within7_pct  = round(100 * mean(abs(diff) <= 7, na.rm = TRUE), 1),
   .groups = 'drop')
+
+# Each wintering area: detection and dates, by scenario and type of WA
+# (stopover; W1 and W2 of the tracks with two wintering areas; the only WA of
+# the other tracks), and % of tracks with the true number of WAs
+wa_tab <- wa_eval %>% left_join(scen, by = 'ID') %>%
+  left_join(truth_pos %>% filter(true == 'W') %>% inner_join(true_wa, by = c('ID', 'date')) %>%
+              distinct(ID, k_true, leg), by = c('ID', 'k_true')) %>%
+  mutate(wa_type = case_when(leg == 'stopover' ~ 'stopover',
+                             movement == 'two_W' & leg == 'W1' ~ 'first of two',
+                             movement == 'two_W' & leg == 'W2' ~ 'second of two',
+                             TRUE ~ 'main wintering area')) %>%
+  lev()
+write_csv(wa_tab, file.path(res_dir, 'sim_wintering_areas_per_track.csv'))
+tab_wa <- wa_tab %>% pivot_longer(c(err_arr, err_dep), names_to = 'date', values_to = 'diff',
+                                  names_prefix = 'err_') %>%
+  group_by(error, movement, wa_type, date) %>%
+  summ_dates() %>%
+  left_join(wa_tab %>% group_by(error, movement, wa_type) %>%
+              summarise(detected_pct = round(100 * mean(detected), 1), .groups = 'drop'),
+            by = c('error', 'movement', 'wa_type')) %>%
+  left_join(wa_tab %>% distinct(ID, error, movement, n_WA_true, n_WA_est) %>%
+              group_by(error, movement) %>%
+              summarise(n_WA_correct_pct = round(100 * mean(n_WA_est == n_WA_true), 1),
+                        n_WA_more_pct = round(100 * mean(n_WA_est > n_WA_true), 1),
+                        n_WA_fewer_pct = round(100 * mean(n_WA_est < n_WA_true), 1),
+                        .groups = 'drop'), by = c('error', 'movement'))
+write_csv(tab_wa, file.path(res_dir, 'sim_wintering_areas.csv'))
 
 err_s <- err %>% left_join(scen, by = 'ID') %>% lev() %>%
   mutate(date = factor(date, levels = date_names))
@@ -178,9 +242,7 @@ print(per_track %>% group_by(error) %>%
 # 4. AGREEMENT SCORE AND SEGMENTS FLAGGED FOR REVIEW ----
 # =============================================================================
 # For each segment: proportion of its positions with the true class. A segment
-# is 'wrong' if most of its positions are misclassified. The segments are
-# classified before W-mig-W is joined, so here the true class of a movement
-# between two wintering stages is migration (true_seg).
+# is 'wrong' if most of its positions are misclassified.
 
 seg <- read_group('Segmentation_results.csv')
 # Positions of each segment: rows begin to end of the track (same rows as

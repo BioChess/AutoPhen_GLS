@@ -16,8 +16,8 @@
 #   tracks, and the mean paired difference with the workflow (method -
 #   workflow, the same tracks) with a bootstrap 95% confidence interval.
 #
-#   As in the evaluation of the simulations (simulations/03), the true class
-#   of a movement between two wintering stages is wintering.
+#   As in the evaluation of the simulations (simulations/03), a stopover is a
+#   wintering area and the movement between two wintering areas is migration.
 #
 # Input:  output/baselines/<dataset>/ (01_run_baselines.R)
 #         output/simulations/<gls|none>/ and output/sensitivity/default/
@@ -38,10 +38,13 @@ set.seed(1)
 
 res_dir <- file.path('output', 'baselines', '_results')
 dir.create(res_dir, recursive = TRUE, showWarnings = FALSE)
-methods <- c('segclust_simple', 'migrateR', 'hmm')
+methods <- c('segclust_simple_50', 'segclust_simple_100', 'segclust_simple_200',
+             'migrateR', 'hmm')
 method_labels <- c(autophen = 'AutoPhen_GLS (this workflow)',
                    autophen_transition = 'AutoPhen_GLS classes, dates from class changes',
-                   segclust_simple = 'segclust2d + simple rule',
+                   segclust_simple_50  = 'segclust2d + simple rule (50 km/day)',
+                   segclust_simple_100 = 'segclust2d + simple rule (100 km/day)',
+                   segclust_simple_200 = 'segclust2d + simple rule (200 km/day)',
                    migrateR = 'migrateR (NSD models)',
                    hmm = 'Hidden Markov model (3 states)')
 
@@ -49,15 +52,6 @@ method_labels <- c(autophen = 'AutoPhen_GLS (this workflow)',
 # =============================================================================
 # 1. TRUTH AND REFERENCE ----
 # =============================================================================
-
-# Movement between two wintering stages = wintering (as in the workflow)
-join_W <- function(d) {
-  d %>% arrange(ID, date) %>% group_by(ID) %>%
-    mutate(prev = if_else(ref == 'mig', NA_character_, ref), nxt = prev) %>%
-    fill(prev, .direction = 'down') %>% fill(nxt, .direction = 'up') %>%
-    mutate(ref = if_else(ref == 'mig' & prev %in% 'W' & nxt %in% 'W', 'W', ref)) %>%
-    ungroup() %>% select(ID, date, ref)
-}
 
 refs <- list()
 if (file.exists(file.path('simulations', 'data', 'sim_truth_positions.csv'))) {
@@ -67,7 +61,7 @@ if (file.exists(file.path('simulations', 'data', 'sim_truth_positions.csv'))) {
   tp <- read_csv(file.path('simulations', 'data', 'sim_truth_positions.csv'),
                  show_col_types = FALSE, col_types = cols(geo_trip = 'c'),
                  col_select = c(geo_trip, Date_Time, stage)) %>%
-    transmute(ID = geo_trip, date = Date_Time, ref = stage) %>% join_W()
+    transmute(ID = geo_trip, date = Date_Time, ref = stage)
   td <- read_csv(file.path('simulations', 'data', 'sim_truth_dates.csv'),
                  show_col_types = FALSE) %>%
     transmute(ID = sim_id, B1_dep, W_arr, W_dep, B2_arr)

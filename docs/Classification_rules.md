@@ -224,9 +224,9 @@ is saved and used in step 10 instead of the automated one.
 
 | Sub-step | Rule | Parameter |
 |---|---|---|
-| 10.1. Short stages | Short sequences (shorter than a segment, `lmin`) between two equal classes take that class (e.g. B-B-mig-B-B → B). | `min_segment_days` (no own parameter) |
-| 10.2. Consecutive wintering stages | Migration between two wintering stages, without breeding between them, is part of the wintering stage (W-mig-W → W). | — |
-| 10.3. Numbering of stages | Stages are numbered in order: B1, mig1, W1, mig2, B2. If the track does not start with breeding, the first breeding stage is B2. | — |
+| 10.1. Short stages | Short sequences (shorter than a segment, `lmin`) between two equal classes take that class (e.g. B-B-mig-B-B → B). | `lmin` |
+| 10.2. Wintering areas and migration | Each stationary non-breeding stage is a wintering area (WA: W1, W2, ...), whatever its duration (e.g. a stopover). The movement between two WAs is migration. The main WA is the longest one; migration before it is mig1 (away from the colony) and after it mig2 (back to the colony). | — |
+| 10.3. Numbering of stages | Stages are numbered in order: B1, mig1, W1, (mig1/mig2, W2, ...), mig2, B2. If the track does not start with breeding, the first breeding stage is B2. | — |
 | 10.4. KDE | For each breeding and wintering stage, a kernel density estimation (KDE) is calculated with the positions of that stage only (`track2KBA`). GLS: equinox positions are not used if more than `kde_min_positions` positions remain. Projection: Lambert azimuthal equal-area centred on the positions of the stage. Bandwidth: href. | `kde_level` = 90 %, `adv$kde_min_positions` = 5 |
 | 10.5. Alternative KDE | If the KDE polygon cannot be obtained with `track2KBA::estSpaceUse()`, it is calculated with `adehabitatHR::kernelUD()`, increasing the grid extent (4, 8, 16, 32) until it works. | `adv$kde_fallback_grid` = 1000, `adv$kde_fallback_extent` = 4 |
 
@@ -243,7 +243,14 @@ not used, even if they fall inside the KDE).
   position inside it.
 
 Breeding: only departure from B1 and arrival at B2. Wintering: arrival and
-departure of each W stage.
+departure of each W stage (`W1_arr_KDE`, `W1_dep_KDE`, `W2_...`), and two
+summaries:
+
+- **Main wintering area** (`WA_main`, `WA_main_arr_KDE`, `WA_main_dep_KDE`,
+  `WA_main_days`): the longest wintering stage.
+- **Total wintering period** (`W_total_arr_KDE`, `W_total_dep_KDE`,
+  `W_total_days`): from the arrival at the first wintering area to the
+  departure from the last one. `n_WA` is the number of wintering areas.
 
 The dates of a track are flagged **Check** if:
 

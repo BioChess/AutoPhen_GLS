@@ -26,8 +26,8 @@
 #   with longer values.
 # - The minimum duration of a stage was a separate parameter (min_stage_days).
 #   It had no effect on the dates (1.5 to 20 days), because a stage cannot be
-#   shorter than a segment and W-mig-W sequences are already joined. It was
-#   removed: the minimum stage length is now the minimum segment length.
+#   shorter than a segment. It was removed: the minimum stage length is now
+#   the minimum segment length.
 # =============================================================================
 
 variant <- function(group, parameter, value, default, step, changes = list()) {

@@ -6,8 +6,9 @@
 #              baseline_functions.R) on the simulated tracks and on the real
 #              tracks with a supervised reference (Calonectris), with the same
 #              positions and cleaning as the workflow:
-#                segclust_simple  segclust2d + simple rule (NSCD limit and
-#                                 net speed)
+#                segclust_simple_<v>  segclust2d + simple rule (NSCD limit
+#                                 and a net speed threshold of v km/day;
+#                                 50, 100 and 200)
 #                migrateR         NSD models (migrant / mixmig dates)
 #                hmm              3-state hidden Markov model (momentuHMM)
 #              The segclust2d results of the workflow are read from its cache
@@ -40,7 +41,9 @@ source('analyses/baselines/baseline_functions.R')
 
 # Datasets and methods to run
 datasets <- c('sim_gls', 'sim_none', 'real')
-methods  <- c('segclust_simple', 'migrateR', 'hmm')
+# segclust_simple_<v>: simple rule with a net speed threshold of v km/day
+methods  <- c('segclust_simple_50', 'segclust_simple_100', 'segclust_simple_200',
+              'migrateR', 'hmm')
 
 # Parallel R sessions (1 = no parallel processing)
 n_workers <- 4
@@ -50,9 +53,6 @@ overwrite <- FALSE
 
 # Settings of the baselines (the rest are the defaults of parameters.R)
 baseline_settings <- list(
-  # segclust_simple: a non-breeding segment is migration if its net speed is
-  # higher than this (km/day)
-  simple_speed_km_day = 100,
   # migrateR: starting values of the time of the outward movement (theta) and
   # of the stay (rho), as proportions of the track duration (all combinations
   # are fitted; the best fit of each model is kept); maximum duration

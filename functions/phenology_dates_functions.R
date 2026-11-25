@@ -408,6 +408,68 @@ extract_phen_dates <- function(results_list) {
 
 
 ################################################################################
+# name_migrations(): names the migration stages from the main wintering area
+################################################################################
+# The main wintering area (WA) is the longest wintering stage (days between its
+# first and last positions). Migration positions before it are 'mig1'
+# (outward, away from the colony) and after it 'mig2' (return). Between two
+# WAs the birds are still migrating, so those positions are migration too
+# (mig1 if before the main WA, mig2 if after it). Tracks without wintering
+# stages keep the names of step 01.
+
+name_migrations <- function(stage, date) {
+  r <- rle(stage)
+  ends <- cumsum(r$lengths); starts <- ends - r$lengths + 1
+  w <- which(r$values == 'W')
+  if (length(w) == 0) return(stage)
+  days <- sapply(w, function(k) as.numeric(difftime(date[ends[k]], date[starts[k]],
+                                                     units = 'days')))
+  main <- w[which.max(days)]
+  is_mig <- r$values %in% c('mig', 'mig1', 'mig2')
+  r$values[is_mig & seq_along(r$values) < main] <- 'mig1'
+  r$values[is_mig & seq_along(r$values) > main] <- 'mig2'
+  inverse.rle(r)
+}
+
+
+################################################################################
+# wintering_summary(): main wintering area and total wintering period
+################################################################################
+# From the dates of each wintering area (W1_arr_KDE, W1_dep_KDE, W2_...):
+#   n_WA              number of wintering areas
+#   WA_main           main wintering area (longest stage, e.g. 'W2')
+#   WA_main_arr_KDE, WA_main_dep_KDE, WA_main_days
+#                     arrival, departure and duration (days) of the main WA
+#   W_total_arr_KDE, W_total_dep_KDE, W_total_days
+#                     total wintering period: from the arrival at the first WA
+#                     to the departure from the last WA
+
+wintering_summary <- function(dates, track) {
+  stg <- unique(track$Breed3[grepl('^W[0-9]+$', track$Breed3)])
+  out <- data.frame(n_WA = length(stg), WA_main = NA_character_,
+                    WA_main_arr_KDE = as.Date(NA), WA_main_dep_KDE = as.Date(NA),
+                    WA_main_days = NA_real_, W_total_arr_KDE = as.Date(NA),
+                    W_total_dep_KDE = as.Date(NA), W_total_days = NA_real_)
+  if (length(stg) == 0) return(out)
+  days <- sapply(stg, function(k) {
+    d <- track$date[track$Breed3 == k]
+    as.numeric(difftime(max(d), min(d), units = 'days'))
+  })
+  main <- stg[which.max(days)]
+  g <- function(col) if (col %in% names(dates)) as.Date(dates[[col]][1]) else as.Date(NA)
+  out$WA_main <- main
+  out$WA_main_arr_KDE <- g(paste0(main, '_arr_KDE'))
+  out$WA_main_dep_KDE <- g(paste0(main, '_dep_KDE'))
+  out$WA_main_days <- as.numeric(out$WA_main_dep_KDE - out$WA_main_arr_KDE)
+  first <- stg[1]; last <- stg[length(stg)]
+  out$W_total_arr_KDE <- g(paste0(first, '_arr_KDE'))
+  out$W_total_dep_KDE <- g(paste0(last, '_dep_KDE'))
+  out$W_total_days <- as.numeric(out$W_total_dep_KDE - out$W_total_arr_KDE)
+  out
+}
+
+
+################################################################################
 # phenology_track(): full step 3 for ONE track
 ################################################################################
 # Runs, for one track, the same steps shown in 03_Phenology_dates.qmd: checks
@@ -440,21 +502,13 @@ phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
   # --- Sequence of stages (B1, mig1, W1, ..., mig2, B2) ----------------------
   track.ph2 <- check_phen(track.ph, "Breed2", min_length = min_stage_length)
 
-  # Movements between two wintering stages (without breeding between them)
-  # are part of the same wintering stage: W-mig-W becomes one W
-  r <- rle(track.ph2$Breed2)
-  is_W <- r$values == 'W'
-  for (k in seq_along(r$values)) {
-    if (r$values[k] %in% c('mig1', 'mig2', 'mig')) {
-      prev_W <- which(is_W[seq_len(k - 1)])
-      next_W <- which(is_W[-seq_len(k)]) + k
-      if (length(prev_W) > 0 && length(next_W) > 0) {
-        between <- r$values[max(prev_W):min(next_W)]
-        if (!any(between == 'B')) r$values[k] <- 'W'
-      }
-    }
-  }
-  track.ph2$Breed2 <- inverse.rle(r)
+  # Each stationary non-breeding stage is a wintering area (WA), whatever its
+  # duration (W1, W2, ...). The movement between two WAs is migration. Short
+  # 'migrations' inside one WA (fewer than min_stage_length positions) were
+  # already removed by check_phen(). Migration before the main WA (the longest
+  # one) is mig1 (away from the colony) and migration after it is mig2 (back
+  # to the colony).
+  track.ph2$Breed2 <- name_migrations(track.ph2$Breed2, track.ph2$date)
   track.ph2$Breed3 <- phen_periods(track.ph2$Breed2)
 
   BW_periods <- unique(track.ph2$Breed3[grep("^B|^W", track.ph2$Breed3)])
@@ -508,6 +562,7 @@ phenology_track <- function(track.ph, info, min_stage_length, kde_level, adv,
                       Year1 = year(track.ph$date[1]),
                       Year2 = year(track.ph$date[nrow(track.ph)]),
                       extract_phen_dates(results_list))
+  dates <- cbind(dates, wintering_summary(dates, track.ph2))
 
   # --- Dates to review --------------------------------------------------------
   # (1) Dates within an equinox window (GLS): latitude is uncertain, so the

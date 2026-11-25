@@ -8,14 +8,15 @@
 #              the colony and the same cleaning), and the same final rules to
 #              build the stages, so only the classification step changes.
 #
-#   segclust_simple  The same segclust2d segmentation as the workflow, with a
-#                    simple rule for each segment: breeding if its mean NSCD
-#                    is below the NSCD limit of the workflow (R2n_limit);
-#                    otherwise migration if its net speed (straight-line
-#                    distance between its first and last positions / duration)
-#                    is higher than 'simple_speed_km_day', and wintering if
-#                    not. No double clustering, no agreement score and no
-#                    correction rules.
+#   segclust_simple_<v>  The same segclust2d segmentation as the workflow,
+#                    with a simple rule for each segment: breeding if its mean
+#                    NSCD is below the NSCD limit of the workflow (R2n_limit,
+#                    calculated for each track); otherwise migration if its net
+#                    speed (straight-line distance between its first and last
+#                    positions / duration) is higher than <v> km/day, and
+#                    wintering if not. No double clustering, no agreement score
+#                    and no correction rules. The speed threshold is fixed for
+#                    all tracks, so several values are tested.
 #   migrateR         Net squared displacement models (Bunnefeld et al. 2011;
 #                    Spitz et al. 2017) fitted to the NSCD (distance to the
 #                    colony). If the best model (AIC) is 'migrant' or
@@ -31,14 +32,13 @@
 #                    sequence. The model is fitted from several starting
 #                    values and the best fit is kept.
 #
-#   Common final rules (as in the workflow, step 03):
-#     1. Short stages (fewer than lmin positions) between two stages of the
-#        same class take that class (check_phen()).
-#     2. Movements between two wintering stages, without breeding between
-#        them, are part of the wintering period (W-mig-W = W).
+#   Common final rule (as in the workflow, step 03): short stages (fewer than
+#   lmin positions) between two stages of the same class take that class
+#   (check_phen()). Each stationary non-breeding stage is a wintering area and
+#   the movement between two wintering areas is migration.
 #   Dates from the classes (first day of each change):
 #     B1_dep = first position after the first breeding stage
-#     W_arr  = first wintering position
+#     W_arr  = first wintering position (total wintering period)
 #     W_dep  = first position after the last wintering position
 #     B2_arr = first breeding position after the last wintering position
 #   migrateR gives its own dates (above); its classes are built from them.
@@ -87,23 +87,10 @@ prepare_track <- function(track, info, p, env) {
 # 2. COMMON FINAL RULES AND DATES ----
 # =============================================================================
 
-# Classes B / mig / W of each position -> final classes (rules 1 and 2)
+# Classes B / mig / W of each position -> final classes (rule 1)
 final_classes <- function(cls, lmin, env) {
   d <- data.frame(Breed2 = cls, stringsAsFactors = FALSE)
-  d <- env$check_phen(d, 'Breed2', min_length = lmin)
-  r <- rle(d$Breed2)
-  is_W <- r$values == 'W'
-  for (k in seq_along(r$values)) {
-    if (r$values[k] == 'mig') {
-      prev_W <- which(is_W[seq_len(k - 1)])
-      next_W <- which(is_W[-seq_len(k)]) + k
-      if (length(prev_W) > 0 && length(next_W) > 0) {
-        between <- r$values[max(prev_W):min(next_W)]
-        if (!any(between == 'B')) r$values[k] <- 'W'
-      }
-    }
-  }
-  inverse.rle(r)
+  env$check_phen(d, 'Breed2', min_length = lmin)$Breed2
 }
 
 # Four dates from the classes of a track (dates of the positions, as Date)
@@ -139,7 +126,8 @@ dates_from_classes <- function(date, cls) {
 # --- 3.1. segclust2d with a simple rule ----------------------------------------
 # 'mode_segclust': the segclust2d result of the workflow (from the cache) or
 # NULL (then it is calculated with the same settings).
-baseline_segclust_simple <- function(df3, p, env, cache_file = NULL) {
+baseline_segclust_simple <- function(df3, p, env, cache_file = NULL,
+                                     speed_km_day = 100) {
   if (!is.null(cache_file) && file.exists(cache_file)) {
     mode_segclust <- readRDS(cache_file)
   } else {
@@ -160,7 +148,7 @@ baseline_segclust_simple <- function(df3, p, env, cache_file = NULL) {
     net  <- sqrt((track$x[max(rows)] - track$x[min(rows)])^2 +
                    (track$y[max(rows)] - track$y[min(rows)])^2)
     speed <- net / max(days, 0.5)
-    if (speed > p$simple_speed_km_day) 'mig' else 'W'
+    if (speed > speed_km_day) 'mig' else 'W'
   })
   cls <- seg_class[findInterval(seq_len(nrow(track)), segs$begin)]
   data.frame(date = track$date, class = cls, stringsAsFactors = FALSE)
@@ -302,10 +290,13 @@ baselines_one <- function(track, info, p, root, cache_file, methods) {
   out <- list()
   for (m in methods) {
     t0 <- Sys.time()
-    res <- tryCatch(suppressWarnings(suppressMessages(switch(m,
-      segclust_simple = list(classes = baseline_segclust_simple(df3, p, env, cache_file)),
-      migrateR = baseline_migrater(df3, p),
-      hmm = baseline_hmm(df3, p)))), error = err_msg)
+    res <- tryCatch(suppressWarnings(suppressMessages(
+      if (startsWith(m, 'segclust_simple')) {
+        v <- as.numeric(sub('segclust_simple_', '', m))
+        list(classes = baseline_segclust_simple(df3, p, env, cache_file, v))
+      } else switch(m,
+        migrateR = baseline_migrater(df3, p),
+        hmm = baseline_hmm(df3, p)))), error = err_msg)
     if (is.character(res)) { out[[m]] <- list(ok = FALSE, error = res); next }
     cls <- res$classes
     cls$class <- final_classes(cls$class, p$lmin, env)
