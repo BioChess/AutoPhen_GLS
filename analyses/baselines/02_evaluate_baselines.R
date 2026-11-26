@@ -88,16 +88,22 @@ if (file.exists(file.path('data', 'reference', 'CAL_tracks_supervised.csv'))) {
 # 2. PER-TRACK RESULTS ----
 # =============================================================================
 
+# Errors of the dates: NA = the method did not estimate a date that exists in
+# the truth / reference (counted as wrong); NaN = no true / reference date
+# (not evaluated)
 evaluate_method <- function(classes, dates, ref, ids) {
   cls <- inner_join(ref$class %>% filter(ID %in% ids), classes,
                     by = c('ID', 'date')) %>%
     group_by(ID) %>% summarise(class_agreement = mean(ref == class), .groups = 'drop')
-  tru <- ref$dates %>% filter(ID %in% ids) %>% mutate(across(-ID, as.Date))
+  tru <- tibble(ID = ids) %>%
+    left_join(ref$dates %>% mutate(across(-ID, as.Date)), by = 'ID')
   est <- dates %>% mutate(ID = as.character(ID), across(-ID, as.Date))
   dts <- left_join(tru, est, by = 'ID', suffix = c('_true', '_est'))
   for (n in date_names) {
-    dts[[paste0('err_', n)]] <- as.numeric(dts[[paste0(n, '_est')]] -
-                                             dts[[paste0(n, '_true')]])
+    t <- dts[[paste0(n, '_true')]]
+    e <- as.numeric(dts[[paste0(n, '_est')]] - t)
+    e[is.na(t)] <- NaN
+    dts[[paste0('err_', n)]] <- e
   }
   dts %>% select(ID, starts_with('err_')) %>%
     left_join(cls, by = 'ID') %>%
@@ -115,6 +121,13 @@ for (d in names(refs)) {
       transmute(ID, date, class = three_classes(Breed2))
     ph <- read_csv(file.path(wf, 'Phenology.csv'), show_col_types = FALSE,
                    col_types = cols(ID = 'c'))
+    # Tracks evaluated: those of the reference that were run (positions
+    # available); the same tracks for all methods
+    info_files <- list.files(file.path('output', 'baselines', d), '_info.csv$',
+                             full.names = TRUE)
+    ran <- unique(c(cl$ID, ph$ID, unlist(lapply(info_files, function(f)
+      read_csv(f, show_col_types = FALSE, col_types = cols(ID = 'c'))$ID))))
+    ref$ids <- intersect(ref$ids, ran)
     per_track[[paste(d, 'autophen')]] <- evaluate_method(
       cl, main_dates(ph, suffix = '_KDE'), ref, ref$ids) %>%
       mutate(dataset = d, method = 'autophen')
@@ -148,8 +161,9 @@ if (exists('sim_md')) per_track <- per_track %>% left_join(sim_md, by = 'ID')
 if (!'error' %in% names(per_track)) per_track$error <- NA_character_
 per_track <- per_track %>%
   mutate(error = ifelse(dataset == 'real', 'real (GLS)', error),
-         within3 = rowMeans(across(starts_with('err_'),
-                                   ~ replace_na(abs(.x) <= 3, FALSE))))
+         within3 = rowSums(across(starts_with('err_'),
+                                  ~ !is.nan(.x) & replace_na(abs(.x) <= 3, FALSE))) /
+           rowSums(across(starts_with('err_'), ~ !is.nan(.x))))
 write_csv(per_track, file.path(res_dir, 'baselines_per_track.csv'))
 
 
@@ -158,7 +172,8 @@ write_csv(per_track, file.path(res_dir, 'baselines_per_track.csv'))
 # =============================================================================
 
 long_dates <- per_track %>%
-  pivot_longer(starts_with('err_'), names_to = 'date', values_to = 'e')
+  pivot_longer(starts_with('err_'), names_to = 'date', values_to = 'e') %>%
+  filter(!is.nan(e))
 summ <- function(g) {
   dates_s <- long_dates %>% group_by(across(all_of(g))) %>%
     summarise(n_dates = n(),
