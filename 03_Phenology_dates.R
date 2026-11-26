@@ -45,6 +45,8 @@ dataset <- 'GLS'
 if (dataset == 'full') {
   metadata_file  <- 'data/All_metadata.csv'
   out_dir        <- 'output/full'
+  # Segmentation on longitude and latitude (test): results in output/full_lonlat/
+  if (identical(adv$seg_coords, 'lonlat')) out_dir <- 'output/full_lonlat'
 } else {
   metadata_file  <- paste0('input/', dataset, '_metadata_example.csv')
   # GLS example: output/; GPS example: output/GPS_example/ (separate folders,

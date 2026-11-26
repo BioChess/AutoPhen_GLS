@@ -868,9 +868,12 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
   if (!is.null(segclust_cache) && file.exists(segclust_cache)) {
     mode_segclust <- readRDS(segclust_cache)
   } else {
+    # Segmentation on projected x and y (km) or on longitude and latitude
+    # (adv$seg_coords). The metrics of the segments (diag.var) are in km.
+    seg_vars <- if (identical(adv$seg_coords, 'lonlat')) c('lon', 'lat') else c('x', 'y')
     mode_segclust <- segclust(track_df3,
                               Kmax = Kmax, lmin = lmin, ncluster = ncluster,
-                              seg.var = c('x', 'y'), order.var = 'x',
+                              seg.var = seg_vars, order.var = 'x',
                               diag.var = c('dx', 'dy', 'R2n', 'x', 'y', 'dist'),
                               subsample = FALSE)
     if (!is.null(segclust_cache)) saveRDS(mode_segclust, segclust_cache)

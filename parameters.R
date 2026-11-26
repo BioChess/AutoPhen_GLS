@@ -80,6 +80,11 @@ adv <- list(
   max_repeated      = 4,    # [P07] more repeated latitudes than this → removed
   edge_positions    = 5,    # [P08] positions checked for repetitions at the
                             #   start and end of the track
+  seg_coords        = "km", # coordinates for the segmentation (segclust2d):
+                            #   "km" projected x and y; "lonlat" longitude and
+                            #   latitude. segclust2d rescales each variable, so
+                            #   the units do not matter, only the shape of the
+                            #   track. Metrics and distances are always in km.
 
   # --- 2.2. Distance threshold breeding / non-breeding [P19] ------------------
   nscd_Kmax         = 3,    # segments for the segmentation of NSCD

@@ -48,6 +48,8 @@ if (dataset == 'full') {
   positions_file <- 'data/All_positions.csv'
   metadata_file  <- 'data/All_metadata.csv'
   out_dir        <- 'output/full'
+  # Segmentation on longitude and latitude (test): results in output/full_lonlat/
+  if (identical(adv$seg_coords, 'lonlat')) out_dir <- 'output/full_lonlat'
 } else {
   positions_file <- paste0('input/', dataset, '_positions_example.csv')
   metadata_file  <- paste0('input/', dataset, '_metadata_example.csv')

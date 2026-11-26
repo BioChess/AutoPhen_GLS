@@ -39,7 +39,8 @@ segclust_key <- function(p) {
          '_eq', ifelse(p$use_equinox, p$eq_window_days, 'no'),
          '_rep', p$adv$max_repeated, '-', p$adv$edge_positions,
          '_K', p$Kmax, '_lmin', p$lmin,
-         '_ncl', min(p$ncluster), '-', max(p$ncluster))
+         '_ncl', min(p$ncluster), '-', max(p$ncluster),
+         ifelse(identical(p$adv$seg_coords, 'lonlat'), '_lonlat', ''))
 }
 
 

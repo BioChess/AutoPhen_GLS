@@ -11,14 +11,14 @@
 #
 # Input:  output/full/Phenology.csv
 #         output/full/plots/phenology/<ID>_phenology.png
-# Output: output/full/plots/figure_candidates.pdf (not shared in GitHub)
+# Output: <in_dir>/plots/figure_candidates.pdf (not shared in GitHub)
 #
 # Run from the project root, after 03_Phenology_dates.R with dataset = 'full'.
 # =============================================================================
 
 pacman::p_load('tidyverse', 'png', 'grid')
 
-in_dir   <- file.path('output', 'full')
+in_dir   <- file.path('output', 'full')   # or 'output/full_lonlat'
 maps_dir <- file.path(in_dir, 'plots', 'phenology')
 out_file <- file.path(in_dir, 'plots', 'figure_candidates.pdf')
 per_page <- 12     # maps per page (4 columns x 3 rows)

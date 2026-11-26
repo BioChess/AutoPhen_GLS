@@ -60,6 +60,9 @@ variants <- list(
   lmin_5       = variant('Requested', 'Minimum segment duration (days)', 5, 2.5,
                          '01', list(min_segment_days = 5)),
 
+  seg_lonlat   = variant('Requested', 'Segmentation coordinates', 'Longitude, latitude',
+                         'Projected (km)', '01', list(adv = list(seg_coords = 'lonlat'))),
+
   maxstep_2220 = variant('Requested', 'Maximum step (km)', 2220, 4440, '01',
                          list(adv = list(max_step = 2220))),
   maxstep_none = variant('Requested', 'Maximum step (km)', 'None', 4440, '01',
