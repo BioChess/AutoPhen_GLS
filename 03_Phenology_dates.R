@@ -45,8 +45,12 @@ dataset <- 'GLS'
 if (dataset == 'full') {
   metadata_file  <- 'data/All_metadata.csv'
   out_dir        <- 'output/full'
-  # Segmentation on longitude and latitude (test): results in output/full_lonlat/
+  # Tests of the segmentation coordinates and of the NSCD clustering: results
+  # in output/full_lonlat/ or output/full_lonlat_dist/
   if (identical(adv$seg_coords, 'lonlat')) out_dir <- 'output/full_lonlat'
+  if (identical(adv$seg_coords, 'lonlat') && identical(adv$nscd_clust, 'distance')) {
+    out_dir <- 'output/full_lonlat_dist'
+  }
 } else {
   metadata_file  <- paste0('input/', dataset, '_metadata_example.csv')
   # GLS example: output/; GPS example: output/GPS_example/ (separate folders,

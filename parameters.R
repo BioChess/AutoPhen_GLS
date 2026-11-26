@@ -89,6 +89,9 @@ adv <- list(
   # --- 2.2. Distance threshold breeding / non-breeding [P19] ------------------
   nscd_Kmax         = 3,    # segments for the segmentation of NSCD
   nscd_ncluster     = 3,    # clusters for the segmentation of NSCD
+  nscd_clust        = "squared", # breeding / non-breeding clustering of the
+                            #   segments on the mean NSCD ("squared", km^2) or
+                            #   on the mean distance to the colony ("distance", km)
 
   # --- 2.3. Trajectory metrics [P15, P16] -------------------------------------
   core_metrics      = c("straightness", "sinuosity", "ang_vector", "mu.dist"),

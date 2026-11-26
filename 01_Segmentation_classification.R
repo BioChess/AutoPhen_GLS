@@ -48,8 +48,12 @@ if (dataset == 'full') {
   positions_file <- 'data/All_positions.csv'
   metadata_file  <- 'data/All_metadata.csv'
   out_dir        <- 'output/full'
-  # Segmentation on longitude and latitude (test): results in output/full_lonlat/
+  # Tests of the segmentation coordinates and of the NSCD clustering: results
+  # in output/full_lonlat/ or output/full_lonlat_dist/
   if (identical(adv$seg_coords, 'lonlat')) out_dir <- 'output/full_lonlat'
+  if (identical(adv$seg_coords, 'lonlat') && identical(adv$nscd_clust, 'distance')) {
+    out_dir <- 'output/full_lonlat_dist'
+  }
 } else {
   positions_file <- paste0('input/', dataset, '_positions_example.csv')
   metadata_file  <- paste0('input/', dataset, '_metadata_example.csv')
