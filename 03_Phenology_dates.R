@@ -71,6 +71,7 @@ area_col   <- 'ECOREGION'
 # Save a map with the KDEs and dates of each track?
 save_plots <- TRUE
 plots_dir  <- file.path(out_dir, 'plots', 'phenology')
+plots_dpi  <- 150             # resolution of the maps (300 for figures of a paper)
 
 
 # =============================================================================
@@ -127,7 +128,7 @@ for (i in seq_along(ids)) {
   phen_list[[ids[i]]] <- res$dates
   if (save_plots && !is.null(res$map)) {
     ggsave(file.path(plots_dir, paste0(ids[i], '_phenology.png')), res$map,
-           width = 15, height = 18, units = 'cm', dpi = 150)
+           width = 15, height = 18, units = 'cm', dpi = plots_dpi)
   }
 }
 
