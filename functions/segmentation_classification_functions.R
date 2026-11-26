@@ -836,6 +836,15 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
   track_df <- track_df %>%
     mutate(lon = track$lon[pos], lat = track$lat[pos], R2n = x^2 + y^2)
 
+  # Check of the colony coordinates: the track should pass close to the colony
+  # (e.g. Colony.lat and Colony.lon swapped give distances of thousands of km)
+  min_dist <- min(sqrt(track_df$R2n), na.rm = TRUE)
+  if (min_dist > 1000) {
+    message('  WARNING: the closest position of track ', geo_trip, ' is ',
+            round(min_dist), ' km from the colony. Check Colony.lat and ',
+            'Colony.lon in the metadata.')
+  }
+
   # --- Equinoxes (only GLS data) ---------------------------------------------
   # First September and March equinoxes after the start of the track (this
   # also works for tracks that do not start in summer, e.g. winter breeders)
