@@ -1,0 +1,2 @@
+Ring,Sp,Colony,ID,Migrant,Year1,Year2,B1_dep_KDE,W1_arr_KDE,W1_dep_KDE,W2_arr_KDE,W2_dep_KDE,W3_arr_KDE,W3_dep_KDE,W4_arr_KDE,W4_dep_KDE,B2_arr_KDE,n_WA,WA_main,WA_main_arr_KDE,WA_main_dep_KDE,WA_main_days,W_total_arr_KDE,W_total_dep_KDE,W_total_days,Dates_in_equinox,KDE_overlap,Check
+GX19241,ICHAUD,SanPedro,GX19241_2021,Migrant,2021,2022,2021-07-10,2021-07-19,2021-11-26,2021-11-25,2021-12-21,2021-12-20,2022-02-04,2022-02-05,2022-02-14,2022-03-04,4,W1,2021-07-19,2021-11-26,130,2021-07-19,2022-02-14,210,B2_arr,W1-W2; W2-W3,Check

@@ -1,0 +1,2 @@
+Ring,Sp,Colony,ID,n_seg,n_cluster,Breed_class,n_seg_B,n_seg_mig,n_seg_W,Agreement_0,Agreement,Metrics,n_check,Direct_BW,run_time_s
+GX19241,ICHAUD,SanPedro,GX19241_2021,15,9,B-mig-W-W-W-W-mig-W-mig-W-mig-W-mig-B-B,3,5,7,0.75,0.75,sd.dist-straightness-sinuosity-ang_vector-mu.dist,5,FALSE,50
