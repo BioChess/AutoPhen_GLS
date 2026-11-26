@@ -216,12 +216,15 @@ if (any(!is.na(per_track$distance))) {
 error_labels <- c(none = 'Simulated, no error', gls = 'Simulated, GLS-like error',
                   gls_eq = 'Simulated, GLS-like error,\nmigration at equinoxes',
                   `real (GLS)` = 'Calonectris GLS tracks\n(supervised reference)')
-fig_dat <- per_track %>%
+# The workflow classes with dates from the class changes are only in the
+# tables (supplementary information), not in the figure
+fig_dat <- per_track %>% filter(method != 'autophen_transition') %>%
   pivot_longer(c(class_agreement, within3), names_to = 'measure', values_to = 'v') %>%
   group_by(error, method, measure) %>%
   summarise(mean = mean(v, na.rm = TRUE),
             lo = boot_ci(v)[1], hi = boot_ci(v)[2], .groups = 'drop') %>%
-  mutate(method = factor(method_labels[method], levels = rev(method_labels)),
+  mutate(method = factor(method_labels[method],
+                         levels = rev(method_labels[names(method_labels) != 'autophen_transition'])),
          error = factor(error_labels[error], levels = error_labels),
          measure = recode(measure, class_agreement = 'Positions correctly classified',
                           within3 = 'Dates within 3 days'))
