@@ -110,7 +110,7 @@ The folder `input/` contains positions of seven Cory's shearwater (*Calonectris 
 
 1. Run `00_setup.R` (only once).
 2. Run `01_Segmentation_classification.R`, then (optionally) `02_Supervised_reclassification.R`, then `03_Phenology_dates.R`.
-3. Results are written to `output/`.
+3. Results are written to `output/` (GPS example: `output/GPS_example/`).
 
 ---
 

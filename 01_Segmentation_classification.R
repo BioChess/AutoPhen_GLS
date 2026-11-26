@@ -39,7 +39,8 @@ source('parameters.R')
 
 # Data to analyse:
 #   'GLS'  example data: Cory's shearwater GLS tracks (input/)
-#   'GPS'  example data: Audouin's gull GPS track (input/)
+#   'GPS'  example data: Audouin's gull GPS track (input/). Results are
+#          saved in output/GPS_example/
 #   'full' full dataset of the paper (data/, not shared; created with
 #          analyses/prepare_full_dataset.R). Results are saved in output/full/
 dataset <- 'GLS'
@@ -50,7 +51,9 @@ if (dataset == 'full') {
 } else {
   positions_file <- paste0('input/', dataset, '_positions_example.csv')
   metadata_file  <- paste0('input/', dataset, '_metadata_example.csv')
-  out_dir        <- 'output'
+  # GLS example: output/; GPS example: output/GPS_example/ (separate folders,
+  # so the results of one example do not mix with the other)
+  out_dir        <- if (dataset == 'GLS') 'output' else file.path('output', 'GPS_example')
 }
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
