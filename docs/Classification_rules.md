@@ -9,7 +9,7 @@ the values in `parameters.R`. Parameter names are written as `adv$name`
 All distances are in km. Before any calculation, positions are projected to
 an azimuthal equidistant projection centred on the colony, so the colony is at
 (0, 0) and the net squared colony distance (NSCD) of a position is
-x² + y² (km²).
+x² + y² (km²). Only the segmentation uses longitude and latitude (see 2).
 
 ---
 
@@ -52,14 +52,22 @@ When the first and last positions of a track are fixed at the colony
 
 ## 2. Segmentation
 
-The track is segmented with `segclust2d::segclust()` on the projected
-coordinates (x, y), with:
+The track is segmented with `segclust2d::segclust()` on longitude and latitude
+(`adv$seg_coords` = "lonlat"), with:
 
 - maximum number of segments `Kmax` = 15;
 - minimum segment length `lmin` = `max(5, min_segment_days × positions_per_day)`
   = 5 positions (2.5 days with two positions per day; 5 is the minimum
   accepted by `segclust2d`);
 - number of clusters `ncluster` = 5 to 10.
+
+`segclust2d` rescales each variable (mean 0, SD 1) before the segmentation,
+so the units of the coordinates do not affect it; only the shape of the track
+does. We use longitude and latitude because the projection centred on the
+colony distorts the tracks far from it (thousands of km), and this can join a
+short movement between two areas to the neighbouring segments. The option
+`adv$seg_coords` = "km" segments the projected coordinates instead. The
+metrics of the segments (section 3) are always calculated in km.
 
 The number of segments and clusters is selected by BIC. Segmentation and
 clustering are done together: clustering allows segments that are separated

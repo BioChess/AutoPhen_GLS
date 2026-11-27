@@ -385,12 +385,7 @@ run_clust <- function(var_comb, df_seg,
   
   recipes <- list(
     recipe_1 = recipe1,
-    # Breeding / non-breeding clustering: on the mean NSCD (km^2, 'squared')
-    # or on the mean distance to the colony (km, 'distance'). Squared values
-    # give much more weight to the farthest segments, so with two wintering
-    # areas at different distances the nearer one can join the breeding group.
-    recipe_2 = (if (identical(adv$nscd_clust, 'distance')) recipe(~ dcol_mean, data = df_seg)
-                else recipe(~ R2n_mean, data = df_seg)) %>%
+    recipe_2 = recipe(~ R2n_mean, data = df_seg) %>%
       step_normalize(all_predictors())
     # recipe_2 = recipe(~ R2n_mean + sd.dx + sd.dy, data = segs2a) %>%
     #   step_normalize(all_predictors())
@@ -484,7 +479,6 @@ segment_class <- function (mode_segclust =  mode_segclust,
       metrics <- trajmetrics(trj_stt)
       metrics$R2n_mean <- mean(trj_stt$R2n)
       metrics$R2n_sd <- sd(trj_stt$R2n)
-      metrics$dcol_mean <- mean(sqrt(trj_stt$R2n))   # distance to the colony (km)
       metrics$state <- unique(trj_stt$state)
       metrics$begin <- begin
       metrics$end <- end
@@ -876,7 +870,7 @@ classify_track <- function(track, info, Kmax, lmin, ncluster, eq_window_days,
   } else {
     # Segmentation on projected x and y (km) or on longitude and latitude
     # (adv$seg_coords). The metrics of the segments (diag.var) are in km.
-    seg_vars <- if (identical(adv$seg_coords, 'lonlat')) c('lon', 'lat') else c('x', 'y')
+    seg_vars <- if (identical(adv$seg_coords, 'km')) c('x', 'y') else c('lon', 'lat')
     mode_segclust <- segclust(track_df3,
                               Kmax = Kmax, lmin = lmin, ncluster = ncluster,
                               seg.var = seg_vars, order.var = 'x',

@@ -133,7 +133,7 @@ baseline_segclust_simple <- function(df3, p, env, cache_file = NULL,
   } else {
     mode_segclust <- segclust2d::segclust(
       df3, Kmax = p$Kmax, lmin = p$lmin, ncluster = p$ncluster,
-      seg.var = if (identical(p$adv$seg_coords, 'lonlat')) c('lon', 'lat') else c('x', 'y'),
+      seg.var = if (identical(p$adv$seg_coords, 'km')) c('x', 'y') else c('lon', 'lat'),
       order.var = 'x',
       diag.var = c('dx', 'dy', 'R2n', 'x', 'y', 'dist'), subsample = FALSE)
   }

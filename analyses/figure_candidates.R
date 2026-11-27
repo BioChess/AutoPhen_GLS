@@ -18,7 +18,7 @@
 
 pacman::p_load('tidyverse', 'png', 'grid')
 
-in_dir   <- file.path('output', 'full')   # or 'output/full_lonlat'
+in_dir   <- file.path('output', 'full')
 maps_dir <- file.path(in_dir, 'plots', 'phenology')
 out_file <- file.path(in_dir, 'plots', 'figure_candidates.pdf')
 per_page <- 12     # maps per page (4 columns x 3 rows)
