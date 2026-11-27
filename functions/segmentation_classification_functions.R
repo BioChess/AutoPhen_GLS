@@ -159,23 +159,36 @@ agreement_score <- function(df_seg, R2n, adv) {
 }
 
 ################################################################################
-# far_b_to_w(): breeding segments beyond the NSCD limit (R2n_mean >
-# R2n_limit) that are next to a wintering segment are reclassified as
-# wintering. A bird cannot breed that far from the colony, and breeding
-# cannot follow or precede wintering without a migration between them. The
-# rule is repeated, so a chain of such segments next to wintering is changed.
-# Set adv$far_b_to_w = FALSE to switch it off.
+# far_b_to_w(): breeding segments clearly beyond the NSCD limit that are next
+# to a wintering segment and at a similar distance from the colony are
+# reclassified as wintering (e.g. a wintering segment with equinox noise that
+# rule C1 did not change). A bird cannot breed that far from the colony, and
+# breeding cannot follow or precede wintering without a migration between
+# them. Conditions (distances in km, square root of the NSCD):
+#   - distance > adv$far_b_limit_factor x NSCD limit (clearly beyond it)
+#   - distance >= adv$far_b_w_ratio x distance of the next wintering segment
+#     (same area; segments in between are left for the next steps)
+# The rule is repeated, so a chain of such segments next to wintering is
+# changed. Set adv$far_b_to_w = FALSE to switch it off.
 
 far_b_to_w <- function(df_seg, adv) {
   breed <- df_seg$Breed
   if (!isTRUE(adv$far_b_to_w) || !'R2n_limit' %in% names(df_seg)) return(breed)
-  far <- dplyr::coalesce(df_seg$R2n_mean > df_seg$R2n_limit, FALSE)
+  dist <- sqrt(df_seg$R2n_mean)
+  far <- dplyr::coalesce(dist > adv$far_b_limit_factor * sqrt(df_seg$R2n_limit),
+                         FALSE)
+  checked <- rep(FALSE, length(breed))
   repeat {
-    next_to_w <- dplyr::lag(breed, default = '') == 'W' |
-      dplyr::lead(breed, default = '') == 'W'
-    change <- breed == 'B' & far & next_to_w
-    if (!any(change)) break
-    breed[change] <- 'W'
+    # Distance of the wintering segment before or after (NA if none)
+    dist_w <- pmax(ifelse(dplyr::lag(breed, default = '') == 'W',
+                          dplyr::lag(dist), NA),
+                   ifelse(dplyr::lead(breed, default = '') == 'W',
+                          dplyr::lead(dist), NA), na.rm = TRUE)
+    cand <- breed == 'B' & far & !is.na(dist_w) & !checked
+    if (!any(cand)) break
+    same_area <- dplyr::coalesce(dist >= adv$far_b_w_ratio * dist_w, FALSE)
+    breed[cand & same_area] <- 'W'
+    checked[cand] <- TRUE
   }
   breed
 }

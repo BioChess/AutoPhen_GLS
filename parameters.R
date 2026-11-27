@@ -142,8 +142,11 @@ adv <- list(
   # segment and > fast_w_min (km between consecutive positions)
   fast_w_ratio      = 2.75,
   fast_w_min        = 250,
-  # Breeding beyond the NSCD limit next to a wintering segment → wintering
-  far_b_to_w        = TRUE,
+  # Breeding clearly beyond the NSCD limit, next to a wintering segment and at
+  # a similar distance from the colony → wintering
+  far_b_to_w         = TRUE,
+  far_b_limit_factor = 1.25, # distance > 1.25 x NSCD limit (in km)
+  far_b_w_ratio      = 0.75, # distance >= 0.75 x that of the wintering segment
 
   # --- 2.9. Segments to review [P34] ------------------------------------------
   check_score       = 0.5,  # segments with lower agreement (0 or 0.25) are
