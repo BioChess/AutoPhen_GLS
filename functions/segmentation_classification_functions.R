@@ -159,11 +159,32 @@ agreement_score <- function(df_seg, R2n, adv) {
 }
 
 ################################################################################
+# far_b_to_w(): breeding segments beyond the NSCD limit (R2n_mean >
+# R2n_limit) that are next to a wintering segment are reclassified as
+# wintering. A bird cannot breed that far from the colony, and breeding
+# cannot follow or precede wintering without a migration between them. The
+# rule is repeated, so a chain of such segments next to wintering is changed.
+# Set adv$far_b_to_w = FALSE to switch it off.
+
+far_b_to_w <- function(df_seg, adv) {
+  breed <- df_seg$Breed
+  if (!isTRUE(adv$far_b_to_w) || !'R2n_limit' %in% names(df_seg)) return(breed)
+  far <- dplyr::coalesce(df_seg$R2n_mean > df_seg$R2n_limit, FALSE)
+  repeat {
+    next_to_w <- dplyr::lag(breed, default = '') == 'W' |
+      dplyr::lead(breed, default = '') == 'W'
+    change <- breed == 'B' & far & next_to_w
+    if (!any(change)) break
+    breed[change] <- 'W'
+  }
+  breed
+}
+
+################################################################################
 # fast_w_to_mig(): wintering segments at the start or end of the wintering
 # stage that are much faster than the main (longest) wintering segment are
 # reclassified as migration. Only consecutive segments from the edge are
 # changed, so the core of the wintering stage is never changed.
-
 fast_w_to_mig <- function(df_seg, adv) {
   b <- df_seg$Breed
   w <- which(b == 'W')
@@ -635,7 +656,11 @@ segment_correction <- function(df_seg = segments2, adv){
   # (e.g. a loop before the return migration) → migration
   segs7$Breed <- fast_w_to_mig(segs7, adv)
 
-  # Impsible situations
+  # Breeding beyond the NSCD limit next to a wintering segment → wintering
+  # (e.g. a wintering segment with equinox noise that rule C1 did not change)
+  segs7$Breed <- far_b_to_w(segs7, adv)
+
+  # Impossible situations
   out <- segs7 %>%
     mutate(
       Breed = case_when(

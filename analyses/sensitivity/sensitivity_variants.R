@@ -120,6 +120,9 @@ variants <- list(
   cdays_seed3  = variant('Additional', 'Colony days random seed', 3, 1, '01',
                          list(positions_file = cdays_file('seed3'))),
 
+  far_b_off    = variant('Additional', 'Rule C6 (far breeding next to wintering)',
+                         'Off', 'On', '01', list(adv = list(far_b_to_w = FALSE))),
+
   dep_first    = variant('Additional', 'Departure', 'First exit', 'Last exit',
                          '03', list(adv = list(departure_rule = 'first_exit')))
 

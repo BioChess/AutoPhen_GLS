@@ -36,18 +36,7 @@ source('analyses/sensitivity/sensitivity_functions.R')
 #   'default'                       main analysis (run it first)
 #   c('kmax_25', 'kmax_35')         several variants, one after the other
 #   names(variants)                 all variants
-to_run <- c(
-  # base, rápidas y umbrales (~3 h)
-  'default',
-  'kde_75', 'kde_95', 'bw_0.5', 'bw_1.5', 'dep_first',
-  'thr_sa_0.4', 'thr_sa_0.6', 'thr_sin_0.8', 'thr_sin_1.2', 'r5_0.65', 'r5_0.85',
-  # pedidas por los revisores (~40 min cada una; kmax_35 y ncluster_5_15 más)
-  'cdays_keep', 'cdays_remove', 'cdays_anchor',
-  'lmin_3.5', 'lmin_5', 'maxstep_2220', 'maxstep_none',
-  'eqwin_10', 'eqwin_30', 'ncluster_3_6', 'kmax_25',
-  'ncluster_5_15', 'kmax_35',
-  # adicionales
-  'cdays_r50', 'cdays_r200')
+to_run <- names(variants)
 
 
 # Parallel R sessions (tracks are processed at the same time). With 6 cores
@@ -55,7 +44,7 @@ to_run <- c(
 n_workers <- 4
 
 # Run again variants that are already done?
-overwrite <- FALSE
+overwrite <- TRUE
 
 # Tracks of the reference
 ref_class_file <- file.path('data', 'reference', 'CAL_tracks_supervised.csv')

@@ -192,6 +192,7 @@ Applied in this order to the selected classification.
 | C3. Wintering near the colony | W, `R2n_mean` < mean of the track | → B |
 | C4. Wintering with migratory movement | W, `sq_disp` > median of the track, `sinuosity` < `adv$corr_sinuosity` (1) and `straightness` > 0.2 | → mig |
 | C5. Fast wintering segments | W at the start or end of the wintering stage, `mu.dist` > `adv$fast_w_ratio` (2.75) × `mu.dist` of the main (longest) wintering segment and > `adv$fast_w_min` (250 km). Only consecutive segments from the edges of the wintering stage are changed. | → mig |
+| C6. Breeding far from the colony next to wintering | B, `R2n_mean` > NSCD limit and next to a W segment (repeated for chains of such segments). Switch off with `adv$far_b_to_w = FALSE`. | → W |
 
 **Impossible sequences:**
 
